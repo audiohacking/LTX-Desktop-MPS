@@ -45,6 +45,24 @@ class LTXTextEncoder:
             original_text_encoder = ModelLedger.text_encoder
             original_cleanup_memory = ltx_utils.cleanup_memory
 
+            def _quantize_linear_weights_fp8(module: object) -> None:
+                """Cast all Linear weights to float8_e4m3fn and patch forward to upcast."""
+                for child in module.modules():  # type: ignore[union-attr]
+                    if not isinstance(child, torch.nn.Linear):
+                        continue
+                    child.weight.data = child.weight.data.to(torch.float8_e4m3fn)
+                    if child.bias is not None:
+                        child.bias.data = child.bias.data.to(torch.float8_e4m3fn)
+
+                    def _make_upcast_forward(lin: torch.nn.Linear) -> Callable[..., torch.Tensor]:
+                        def _fwd(x: torch.Tensor, **kw: object) -> torch.Tensor:
+                            w = lin.weight.to(x.dtype)
+                            b = lin.bias.to(x.dtype) if lin.bias is not None else None
+                            return torch.nn.functional.linear(x, w, b)
+                        return _fwd
+
+                    child.forward = _make_upcast_forward(child)  # type: ignore[assignment]
+
             def patched_text_encoder(self_model_ledger: ModelLedger) -> object:
                 state = state_getter()
                 te_state = state.text_encoder
@@ -62,7 +80,19 @@ class LTXTextEncoder:
                         logger.warning("Failed to move cached text encoder to %s", self.device, exc_info=True)
                     return te_state.cached_encoder
 
-                te_state.cached_encoder = cast(CachedTextEncoder, original_text_encoder(self_model_ledger))
+                saved_device = self_model_ledger.device
+                self_model_ledger.device = torch.device("cpu")
+                try:
+                    te_state.cached_encoder = cast(
+                        CachedTextEncoder, original_text_encoder(self_model_ledger)
+                    )
+                finally:
+                    self_model_ledger.device = saved_device
+
+                _quantize_linear_weights_fp8(te_state.cached_encoder)
+
+                te_state.cached_encoder.to(self.device)
+                sync_device(self.device)
                 return te_state.cached_encoder
 
             def patched_cleanup_memory() -> None:
