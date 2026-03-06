@@ -20,7 +20,7 @@ interface SettingsModalProps {
 type TabId = 'general' | 'apiKeys' | 'inference' | 'promptEnhancer' | 'about'
 
 export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProps) {
-  const { settings, updateSettings, saveLtxApiKey, saveReplicateApiKey, saveGeminiApiKey, forceApiGenerations } = useAppSettings()
+  const { settings, updateSettings, saveLtxApiKey, saveReplicateApiKey, saveGeminiApiKey, savePaletteApiKey, forceApiGenerations } = useAppSettings()
   const onSettingsChange = (next: AppSettings) => updateSettings(next)
   const [activeTab, setActiveTab] = useState<TabId>('general')
   const [ltxApiKeyInput, setLtxApiKeyInput] = useState('')
@@ -30,6 +30,9 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
   const replicateApiKeyInputRef = useRef<HTMLInputElement>(null)
   const [geminiApiKeyInput, setGeminiApiKeyInput] = useState('')
   const geminiApiKeyInputRef = useRef<HTMLInputElement>(null)
+  const [paletteApiKeyInput, setPaletteApiKeyInput] = useState('')
+  const [paletteStatus, setPaletteStatus] = useState<{ connected: boolean; user: { email: string; name: string } | null } | null>(null)
+  const [paletteCredits, setPaletteCredits] = useState<number | null>(null)
   const [textEncoderStatus, setTextEncoderStatus] = useState<TextEncoderStatus | null>(null)
   const [isDownloading, setIsDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
@@ -48,6 +51,34 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
       setActiveTab(initialTab)
     }
   }, [isOpen, initialTab])
+
+  // Poll Palette sync status when on apiKeys tab and key is set
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'apiKeys' || !settings.hasPaletteApiKey) {
+      setPaletteStatus(null)
+      setPaletteCredits(null)
+      return
+    }
+    let cancelled = false
+    const fetchStatus = async () => {
+      try {
+        const backendUrl = await window.electronAPI.getBackendUrl()
+        const [statusRes, creditsRes] = await Promise.all([
+          fetch(`${backendUrl}/api/sync/status`),
+          fetch(`${backendUrl}/api/sync/credits`),
+        ])
+        if (cancelled) return
+        if (statusRes.ok) setPaletteStatus(await statusRes.json())
+        if (creditsRes.ok) {
+          const data = await creditsRes.json()
+          setPaletteCredits(data.balance ?? null)
+        }
+      } catch { /* ignore */ }
+    }
+    void fetchStatus()
+    const interval = setInterval(fetchStatus, 60_000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [isOpen, activeTab, settings.hasPaletteApiKey])
 
   useEffect(() => {
     if (!isOpen || activeTab !== 'apiKeys' || !focusLtxApiKeyInputOnTabChange) return
@@ -926,6 +957,76 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
                     >
                       Get Gemini API key →
                     </a>
+                  </div>
+                </div>
+              </div>
+
+              {/* Director's Palette Section */}
+              <div className="space-y-4 pt-4 border-t border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <Film className="h-4 w-4 text-amber-400" />
+                  <h3 className="text-sm font-semibold text-white">Director's Palette</h3>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">Cloud Sync</span>
+                </div>
+
+                <p className="text-xs text-zinc-500 leading-relaxed">
+                  Connect to Director's Palette to sync your gallery, characters, and library between web and desktop.
+                </p>
+
+                <div className="bg-zinc-800/50 rounded-lg p-4 space-y-3">
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      value={paletteApiKeyInput}
+                      onChange={(e) => setPaletteApiKeyInput(e.target.value)}
+                      placeholder={settings.hasPaletteApiKey ? 'Enter new key to replace...' : 'Enter your Palette API key...'}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    />
+                    <button
+                      onClick={() => {
+                        const trimmed = paletteApiKeyInput.trim()
+                        if (!trimmed) return
+                        void savePaletteApiKey(trimmed)
+                        setPaletteApiKeyInput('')
+                      }}
+                      disabled={!paletteApiKeyInput.trim()}
+                      className="px-3 py-2 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-500 disabled:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                    >
+                      Save Key
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className={`text-xs px-2 py-1 rounded inline-flex items-center gap-1.5 ${
+                      paletteStatus?.connected
+                        ? 'bg-green-500/10 text-green-400'
+                        : settings.hasPaletteApiKey
+                          ? 'bg-amber-500/10 text-amber-400'
+                          : 'bg-zinc-800 text-zinc-500'
+                    }`}>
+                      {paletteStatus?.connected ? (
+                        <>
+                          <Check className="h-3 w-3" />
+                          Connected{paletteStatus.user ? ` as ${paletteStatus.user.email}` : ''}
+                        </>
+                      ) : settings.hasPaletteApiKey ? (
+                        <>
+                          <AlertCircle className="h-3 w-3" />
+                          Not connected
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle className="h-3 w-3" />
+                          Optional
+                        </>
+                      )}
+                    </div>
+                    {paletteCredits !== null && (
+                      <span className="text-xs text-zinc-400">
+                        Credits: <span className="text-white font-medium">{paletteCredits.toLocaleString()}</span>
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

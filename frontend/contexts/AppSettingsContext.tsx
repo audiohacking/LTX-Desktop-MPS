@@ -15,6 +15,7 @@ export interface AppSettings {
   hasLtxApiKey: boolean
   userPrefersLtxApiVideoGenerations: boolean
   hasReplicateApiKey: boolean
+  hasPaletteApiKey: boolean
   imageModel: string
   videoModel: string
   hasGeminiApiKey: boolean
@@ -34,6 +35,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   hasLtxApiKey: false,
   userPrefersLtxApiVideoGenerations: false,
   hasReplicateApiKey: false,
+  hasPaletteApiKey: false,
   imageModel: 'z-image-turbo',
   videoModel: 'ltx-fast',
   hasGeminiApiKey: false,
@@ -58,6 +60,7 @@ interface AppSettingsContextValue {
   saveLtxApiKey: (value: string) => Promise<void>
   saveReplicateApiKey: (value: string) => Promise<void>
   saveGeminiApiKey: (value: string) => Promise<void>
+  savePaletteApiKey: (value: string) => Promise<void>
   forceApiGenerations: boolean
   shouldVideoGenerateWithLtxApi: boolean
 }
@@ -83,6 +86,7 @@ function normalizeAppSettings(data: Partial<AppSettings>): AppSettings {
     hasLtxApiKey: data.hasLtxApiKey ?? DEFAULT_APP_SETTINGS.hasLtxApiKey,
     userPrefersLtxApiVideoGenerations: data.userPrefersLtxApiVideoGenerations ?? DEFAULT_APP_SETTINGS.userPrefersLtxApiVideoGenerations,
     hasReplicateApiKey: data.hasReplicateApiKey ?? DEFAULT_APP_SETTINGS.hasReplicateApiKey,
+    hasPaletteApiKey: data.hasPaletteApiKey ?? DEFAULT_APP_SETTINGS.hasPaletteApiKey,
     imageModel: data.imageModel ?? DEFAULT_APP_SETTINGS.imageModel,
     videoModel: data.videoModel ?? DEFAULT_APP_SETTINGS.videoModel,
     hasGeminiApiKey: data.hasGeminiApiKey ?? DEFAULT_APP_SETTINGS.hasGeminiApiKey,
@@ -218,7 +222,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     if (!backendUrl || !isLoaded || backendProcessStatus !== 'alive') return
     const syncTimer = setTimeout(async () => {
       try {
-        const { hasLtxApiKey: _a, hasReplicateApiKey: _b, hasGeminiApiKey: _c, ...syncPayload } = settings
+        const { hasLtxApiKey: _a, hasReplicateApiKey: _b, hasGeminiApiKey: _c, hasPaletteApiKey: _d, ...syncPayload } = settings
         await fetch(`${backendUrl}/api/settings`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -281,6 +285,20 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     await refreshSettings()
   }, [backendUrl, refreshSettings])
 
+  const savePaletteApiKey = useCallback(async (value: string) => {
+    if (!backendUrl) return
+    const response = await fetch(`${backendUrl}/api/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paletteApiKey: value }),
+    })
+    if (!response.ok) {
+      const detail = await response.text()
+      throw new Error(detail || 'Failed to save Palette API key.')
+    }
+    await refreshSettings()
+  }, [backendUrl, refreshSettings])
+
   const shouldVideoGenerateWithLtxApi =
     forceApiGenerations || (settings.userPrefersLtxApiVideoGenerations && settings.hasLtxApiKey)
 
@@ -294,10 +312,11 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
       saveLtxApiKey,
       saveReplicateApiKey,
       saveGeminiApiKey,
+      savePaletteApiKey,
       forceApiGenerations,
       shouldVideoGenerateWithLtxApi,
     }),
-    [forceApiGenerations, isLoaded, refreshSettings, runtimePolicyLoaded, saveReplicateApiKey, saveGeminiApiKey, saveLtxApiKey, settings, shouldVideoGenerateWithLtxApi, updateSettings],
+    [forceApiGenerations, isLoaded, refreshSettings, runtimePolicyLoaded, savePaletteApiKey, saveReplicateApiKey, saveGeminiApiKey, saveLtxApiKey, settings, shouldVideoGenerateWithLtxApi, updateSettings],
   )
 
   return <AppSettingsContext.Provider value={contextValue}>{children}</AppSettingsContext.Provider>
