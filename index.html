@@ -12,6 +12,58 @@
   </head>
   <body class="bg-background text-foreground">
     <div id="root"></div>
+    <script>
+      // Dev-only mock for browser testing (outside Electron)
+      if (!window.electronAPI && location.protocol === 'http:') {
+        const noop = () => Promise.resolve();
+        window.electronAPI = {
+          getBackendUrl: () => Promise.resolve('http://localhost:8000'),
+          getModelsPath: () => Promise.resolve('C:/models'),
+          readLocalFile: () => Promise.resolve({ data: '', mimeType: 'image/png' }),
+          checkGpu: () => Promise.resolve({ available: true, name: 'NVIDIA RTX 4090', vram: 24576 }),
+          getAppInfo: () => Promise.resolve({ version: '1.0.0-dev', isPackaged: false, modelsPath: 'C:/models', userDataPath: 'C:/users/test' }),
+          checkFirstRun: () => Promise.resolve({ needsSetup: false, needsLicense: false }),
+          acceptLicense: () => Promise.resolve(true),
+          completeSetup: () => Promise.resolve(true),
+          fetchLicenseText: () => Promise.resolve('MIT License'),
+          getNoticesText: () => Promise.resolve(''),
+          openLtxApiKeyPage: () => Promise.resolve(true),
+          openReplicateApiKeyPage: () => Promise.resolve(true),
+          openParentFolderOfFile: noop,
+          showItemInFolder: noop,
+          getLogs: () => Promise.resolve({ logPath: '', lines: [] }),
+          getLogPath: () => Promise.resolve({ logPath: '', logDir: '' }),
+          openLogFolder: () => Promise.resolve(true),
+          getResourcePath: () => Promise.resolve(null),
+          getDownloadsPath: () => Promise.resolve('C:/downloads'),
+          ensureDirectory: () => Promise.resolve({ success: true }),
+          showSaveDialog: () => Promise.resolve(null),
+          saveFile: () => Promise.resolve({ success: true }),
+          saveBinaryFile: () => Promise.resolve({ success: true }),
+          showOpenDirectoryDialog: () => Promise.resolve(null),
+          searchDirectoryForFiles: () => Promise.resolve({}),
+          copyFile: () => Promise.resolve({ success: true }),
+          checkFilesExist: () => Promise.resolve({}),
+          showOpenFileDialog: () => Promise.resolve(null),
+          exportNative: () => Promise.resolve({ success: true }),
+          exportCancel: () => Promise.resolve({ ok: true }),
+          checkPythonReady: () => Promise.resolve({ ready: true }),
+          startPythonSetup: noop,
+          startPythonBackend: noop,
+          getBackendHealthStatus: () => Promise.resolve({ status: 'alive' }),
+          onPythonSetupProgress: () => {},
+          removePythonSetupProgress: () => {},
+          onBackendHealthStatus: (cb) => { setTimeout(() => cb({ status: 'alive' }), 100); return () => {}; },
+          extractVideoFrame: () => Promise.resolve({ path: 'C:/temp/frame.png', url: 'file:///C:/temp/frame.png' }),
+          writeLog: noop,
+          getAnalyticsState: () => Promise.resolve({ analyticsEnabled: false, installationId: 'test' }),
+          setAnalyticsEnabled: noop,
+          sendAnalyticsEvent: noop,
+          platform: 'win32'
+        };
+        console.log('[DEV] electronAPI mock injected for browser testing');
+      }
+    </script>
     <script type="module" src="/frontend/main.tsx"></script>
   </body>
 </html>
