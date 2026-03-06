@@ -22,11 +22,14 @@ from handlers import (
     VideoGenerationHandler,
 )
 from runtime_config.runtime_config import RuntimeConfig
+from handlers.enhance_prompt_handler import EnhancePromptHandler
+from handlers.sync_handler import SyncHandler
 from services.interfaces import (
     A2VPipeline,
     FastVideoPipeline,
     ImageAPIClient,
     ImageGenerationPipeline,
+    PaletteSyncClient,
     VideoAPIClient,
     GpuCleaner,
     GpuInfo,
@@ -60,6 +63,7 @@ class AppHandler:
         ltx_api_client: LTXAPIClient,
         image_api_client: ImageAPIClient,
         video_api_client: VideoAPIClient,
+        palette_sync_client: PaletteSyncClient,
         fast_video_pipeline_class: type[FastVideoPipeline],
         image_generation_pipeline_class: type[ImageGenerationPipeline],
         ic_lora_pipeline_class: type[IcLoraPipeline],
@@ -79,6 +83,7 @@ class AppHandler:
         self.ltx_api_client = ltx_api_client
         self.image_api_client = image_api_client
         self.video_api_client = video_api_client
+        self.palette_sync_client = palette_sync_client
         self.fast_video_pipeline_class = fast_video_pipeline_class
         self.image_generation_pipeline_class = image_generation_pipeline_class
         self.ic_lora_pipeline_class = ic_lora_pipeline_class
@@ -194,6 +199,12 @@ class AppHandler:
             http=http,
         )
 
+        self.enhance_prompt = EnhancePromptHandler(
+            state=self.state,
+            lock=self._lock,
+            http=http,
+        )
+
         self.retake = RetakeHandler(
             state=self.state,
             lock=self._lock,
@@ -215,6 +226,11 @@ class AppHandler:
             ic_lora_model_downloader=ic_lora_model_downloader,
             ic_lora_dir=config.ic_lora_dir,
             outputs_dir=config.outputs_dir,
+        )
+
+        self.sync = SyncHandler(
+            state=self.state,
+            palette_sync_client=palette_sync_client,
         )
 
         self.downloads.cleanup_downloading_dir()
@@ -246,6 +262,7 @@ class ServiceBundle:
     ltx_api_client: LTXAPIClient
     image_api_client: ImageAPIClient
     video_api_client: VideoAPIClient
+    palette_sync_client: PaletteSyncClient
     fast_video_pipeline_class: type[FastVideoPipeline]
     image_generation_pipeline_class: type[ImageGenerationPipeline]
     ic_lora_pipeline_class: type[IcLoraPipeline]
@@ -271,6 +288,7 @@ def build_default_service_bundle(config: RuntimeConfig) -> ServiceBundle:
     from services.retake_pipeline.ltx_retake_pipeline import LTXRetakePipeline
     from services.task_runner.threading_runner import ThreadingRunner
     from services.text_encoder.ltx_text_encoder import LTXTextEncoder
+    from services.palette_sync_client.palette_sync_client_impl import PaletteSyncClientImpl
     from services.video_processor.video_processor_impl import VideoProcessorImpl
 
     http = HTTPClientImpl()
@@ -290,6 +308,7 @@ def build_default_service_bundle(config: RuntimeConfig) -> ServiceBundle:
         ltx_api_client=LTXAPIClientImpl(http=http, ltx_api_base_url=config.ltx_api_base_url),
         image_api_client=ReplicateImageClientImpl(http=http),
         video_api_client=ReplicateVideoClientImpl(http=http),
+        palette_sync_client=PaletteSyncClientImpl(http=http),
         fast_video_pipeline_class=LTXFastVideoPipeline,
         image_generation_pipeline_class=ZitImageGenerationPipeline,
         ic_lora_pipeline_class=LTXIcLoraPipeline,
@@ -319,6 +338,7 @@ def build_initial_state(
         ltx_api_client=bundle.ltx_api_client,
         image_api_client=bundle.image_api_client,
         video_api_client=bundle.video_api_client,
+        palette_sync_client=bundle.palette_sync_client,
         fast_video_pipeline_class=bundle.fast_video_pipeline_class,
         image_generation_pipeline_class=bundle.image_generation_pipeline_class,
         ic_lora_pipeline_class=bundle.ic_lora_pipeline_class,

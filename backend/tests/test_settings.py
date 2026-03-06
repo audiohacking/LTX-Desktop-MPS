@@ -165,6 +165,7 @@ class TestSettingsPersistence:
             ltx_api_client=fake_services.ltx_api_client,
             image_api_client=fake_services.image_api_client,
             video_api_client=fake_services.video_api_client,
+            palette_sync_client=fake_services.palette_sync_client,
             fast_video_pipeline_class=type(fake_services.fast_video_pipeline),
             image_generation_pipeline_class=type(fake_services.image_generation_pipeline),
             ic_lora_pipeline_class=type(fake_services.ic_lora_pipeline),
@@ -208,6 +209,17 @@ class TestSettingsPersistence:
 
         loaded = self._new_state(test_state, default_app_settings)
         assert loaded.state.app_settings.user_prefers_ltx_api_video_generations is True
+
+
+class TestPaletteApiKey:
+    def test_palette_api_key_roundtrip(self, client, default_app_settings):
+        """Palette API key can be saved and is masked in responses."""
+        resp = client.post("/api/settings", json={"paletteApiKey": "dp_test_key_123"})
+        assert resp.status_code == 200
+        resp = client.get("/api/settings")
+        data = resp.json()
+        assert data["hasPaletteApiKey"] is True
+        assert "dp_test_key_123" not in resp.text
 
 
 class TestSettingsSchemaDrift:

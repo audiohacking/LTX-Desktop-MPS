@@ -65,6 +65,7 @@ class AppSettings(SettingsBaseModel):
     ltx_api_key: str = ""
     user_prefers_ltx_api_video_generations: bool = False
     replicate_api_key: str = ""
+    palette_api_key: str = ""
     image_model: str = "z-image-turbo"
     video_model: str = "ltx-fast"
     use_local_text_encoder: bool = False
@@ -138,6 +139,7 @@ class SettingsResponse(SettingsBaseModel):
     has_ltx_api_key: bool = False
     user_prefers_ltx_api_video_generations: bool = False
     has_replicate_api_key: bool = False
+    has_palette_api_key: bool = False
     image_model: str = "z-image-turbo"
     video_model: str = "ltx-fast"
     use_local_text_encoder: bool = False
@@ -155,9 +157,11 @@ def to_settings_response(settings: AppSettings) -> SettingsResponse:
     data = settings.model_dump(by_alias=False)
     ltx_key = data.pop("ltx_api_key", "")
     replicate_key = data.pop("replicate_api_key", "")
+    palette_key = data.pop("palette_api_key", "")
     gemini_key = data.pop("gemini_api_key", "")
     data["has_ltx_api_key"] = bool(ltx_key)
     data["has_replicate_api_key"] = bool(replicate_key)
+    data["has_palette_api_key"] = bool(palette_key)
     data["has_gemini_api_key"] = bool(gemini_key)
     return SettingsResponse.model_validate(data)
 

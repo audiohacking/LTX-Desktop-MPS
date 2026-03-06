@@ -4,6 +4,7 @@
   "load_on_startup": false,
   "ltx_api_key": "",
   "replicate_api_key": "",
+  "palette_api_key": "",
   "image_model": "z-image-turbo",
   "video_model": "ltx-fast",
   "fast_model": {

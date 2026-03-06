@@ -322,6 +322,25 @@ class FakeVideoAPIClient:
         return self.text_to_video_result
 
 
+class FakePaletteSyncClient:
+    def __init__(self) -> None:
+        self.validate_calls: list[str] = []
+        self.credits_calls: list[str] = []
+        self.raise_on_validate: Exception | None = None
+        self.user_info: dict[str, Any] = {"id": "user-123", "email": "test@example.com", "name": "Test User"}
+        self.credits_info: dict[str, Any] = {"balance": 5000, "currency": "credits"}
+
+    def validate_connection(self, *, api_key: str) -> dict[str, Any]:
+        self.validate_calls.append(api_key)
+        if self.raise_on_validate is not None:
+            raise self.raise_on_validate
+        return self.user_info
+
+    def get_credits(self, *, api_key: str) -> dict[str, Any]:
+        self.credits_calls.append(api_key)
+        return self.credits_info
+
+
 class FakeModelDownloader:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
@@ -788,6 +807,7 @@ class FakeServices:
     ltx_api_client: FakeLTXAPIClient = field(default_factory=FakeLTXAPIClient)
     image_api_client: FakeImageAPIClient = field(default_factory=FakeImageAPIClient)
     video_api_client: FakeVideoAPIClient = field(default_factory=FakeVideoAPIClient)
+    palette_sync_client: FakePaletteSyncClient = field(default_factory=FakePaletteSyncClient)
     fast_video_pipeline: FakeFastVideoPipeline = field(default_factory=FakeFastVideoPipeline)
     image_generation_pipeline: FakeImageGenerationPipeline = field(default_factory=FakeImageGenerationPipeline)
     ic_lora_pipeline: FakeIcLoraPipeline = field(default_factory=FakeIcLoraPipeline)
