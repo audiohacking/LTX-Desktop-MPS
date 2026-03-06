@@ -1256,3 +1256,15 @@ class TestEnhancePromptFlag:
         assert r.status_code == 200
 
         assert len(fake_services.text_encoder.encode_calls) == 0
+
+
+def test_generate_video_request_accepts_last_frame_path():
+    from api_types import GenerateVideoRequest
+    req = GenerateVideoRequest(prompt="test", lastFramePath="/path/to/last.png")
+    assert req.lastFramePath == "/path/to/last.png"
+
+
+def test_generate_video_request_last_frame_defaults_none():
+    from api_types import GenerateVideoRequest
+    req = GenerateVideoRequest(prompt="test")
+    assert req.lastFramePath is None
