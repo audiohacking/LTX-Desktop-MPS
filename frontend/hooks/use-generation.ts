@@ -1,6 +1,20 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import type { GenerationSettings } from '../components/SettingsPanel'
 import { useAppSettings } from '../contexts/AppSettingsContext'
+
+export interface QueueJob {
+  id: string
+  type: string
+  model: string
+  params: Record<string, unknown>
+  status: string
+  slot: string
+  progress: number
+  phase: string
+  result_paths: string[]
+  error: string | null
+  created_at: string
+}
 
 interface GenerationState {
   isGenerating: boolean
@@ -11,14 +25,8 @@ interface GenerationState {
   imageUrl: string | null
   imageUrls: string[]  // For multiple image variations
   error: string | null
-}
-
-interface GenerationProgress {
-  status: string
-  phase: string
-  progress: number
-  currentStep: number | null
-  totalSteps: number | null
+  jobs: QueueJob[]
+  lastModel: string | null
 }
 
 interface UseGenerationReturn extends GenerationState {
@@ -26,6 +34,7 @@ interface UseGenerationReturn extends GenerationState {
   generateImage: (prompt: string, settings: GenerationSettings) => Promise<void>
   cancel: () => void
   reset: () => void
+  clearQueue: () => void
 }
 
 const IMAGE_SHORT_SIDE_BY_RESOLUTION: Record<string, number> = {
@@ -86,6 +95,12 @@ function getPhaseMessage(phase: string): string {
   }
 }
 
+// Convert a file system path to a file:// URL
+function pathToFileUrl(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/')
+  return normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`
+}
+
 export function useGeneration(): UseGenerationReturn {
   const { settings: appSettings, forceApiGenerations, refreshSettings } = useAppSettings()
   const [state, setState] = useState<GenerationState>({
@@ -97,9 +112,101 @@ export function useGeneration(): UseGenerationReturn {
     imageUrl: null,
     imageUrls: [],
     error: null,
+    jobs: [],
+    lastModel: null,
   })
 
-  const abortControllerRef = useRef<AbortController | null>(null)
+  // Track the most recently submitted job ID for cancel
+  const activeJobIdRef = useRef<string | null>(null)
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Start polling the queue status. Cleans up automatically when no active jobs remain.
+  const startPolling = useCallback(() => {
+    if (pollIntervalRef.current) return // already polling
+
+    const poll = async () => {
+      try {
+        const backendUrl = await window.electronAPI.getBackendUrl()
+        const res = await fetch(`${backendUrl}/api/queue/status`)
+        if (!res.ok) return
+        const data: { jobs: QueueJob[] } = await res.json()
+        const jobs: QueueJob[] = data.jobs
+
+        // Determine if any job is still running / queued
+        const hasRunning = jobs.some(j => j.status === 'queued' || j.status === 'running')
+
+        // Derive progress from the most-recently active job
+        const activeId = activeJobIdRef.current
+        const activeJob = activeId ? jobs.find(j => j.id === activeId) : null
+
+        setState(prev => {
+          const next = { ...prev, jobs }
+
+          if (activeJob) {
+            next.progress = activeJob.progress
+            next.statusMessage = getPhaseMessage(activeJob.phase)
+
+            if (activeJob.status === 'complete') {
+              next.isGenerating = hasRunning
+              next.progress = 100
+              next.statusMessage = 'Complete!'
+
+              next.lastModel = activeJob.model
+
+              if (activeJob.type === 'video' && activeJob.result_paths.length > 0) {
+                const rawPath = activeJob.result_paths[0]
+                next.videoUrl = pathToFileUrl(rawPath)
+                next.videoPath = rawPath
+              } else if (activeJob.type === 'image' && activeJob.result_paths.length > 0) {
+                const fileUrls = activeJob.result_paths.map(pathToFileUrl)
+                next.imageUrl = fileUrls[0]
+                next.imageUrls = fileUrls
+              }
+
+              // Clear active job so we don't keep overwriting state
+              activeJobIdRef.current = null
+            } else if (activeJob.status === 'error') {
+              next.isGenerating = hasRunning
+              next.error = activeJob.error || 'Generation failed'
+              activeJobIdRef.current = null
+            } else if (activeJob.status === 'cancelled') {
+              next.isGenerating = hasRunning
+              next.statusMessage = 'Cancelled'
+              activeJobIdRef.current = null
+            }
+          } else {
+            next.isGenerating = hasRunning
+          }
+
+          return next
+        })
+
+        // Stop polling when nothing is active
+        if (!hasRunning) {
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current)
+            pollIntervalRef.current = null
+          }
+        }
+      } catch {
+        // Ignore polling errors
+      }
+    }
+
+    // Fire immediately, then every 500ms
+    void poll()
+    pollIntervalRef.current = setInterval(poll, 500)
+  }, [])
+
+  // Clean up polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+        pollIntervalRef.current = null
+      }
+    }
+  }, [])
 
   const generate = useCallback(async (
     prompt: string,
@@ -111,7 +218,8 @@ export function useGeneration(): UseGenerationReturn {
       ? 'Loading Pro model & generating...'
       : 'Generating video...'
 
-    setState({
+    setState(prev => ({
+      ...prev,
       isGenerating: true,
       progress: 0,
       statusMessage: statusMsg,
@@ -120,20 +228,13 @@ export function useGeneration(): UseGenerationReturn {
       imageUrl: null,
       imageUrls: [],
       error: null,
-    })
-
-    abortControllerRef.current = new AbortController()
-    let progressInterval: ReturnType<typeof setInterval> | null = null
-    let shouldApplyPollingUpdates = true
+    }))
 
     try {
-      // Get backend URL from Electron
       const backendUrl = await window.electronAPI.getBackendUrl()
 
-      // Prepare JSON body
-      const body: Record<string, unknown> = {
+      const params: Record<string, unknown> = {
         prompt,
-        model: settings.model,
         duration: String(settings.duration),
         resolution: settings.videoResolution,
         fps: String(settings.fps),
@@ -142,139 +243,52 @@ export function useGeneration(): UseGenerationReturn {
         aspectRatio: settings.aspectRatio || '16:9',
       }
       if (imagePath) {
-        body.imagePath = imagePath
+        params.imagePath = imagePath
       }
       if (audioPath) {
-        body.audioPath = audioPath
+        params.audioPath = audioPath
       }
 
-      // Poll for real progress from backend with time-based interpolation
-      let lastPhase = ''
-      let inferenceStartTime = 0
-      // Estimated inference time in seconds based on model
-      const estimatedInferenceTime = settings.model === 'pro' ? 120 : 45
-      
-      const pollProgress = async () => {
-        if (!shouldApplyPollingUpdates) return
-        try {
-          const res = await fetch(`${backendUrl}/api/generation/progress`)
-          if (res.ok) {
-            const data: GenerationProgress = await res.json()
-            if (!shouldApplyPollingUpdates) return
-            
-            let displayProgress = data.progress
-            let statusMessage = getPhaseMessage(data.phase)
-            
-            // Time-based interpolation during inference phase
-            if (data.phase === 'inference') {
-              if (lastPhase !== 'inference') {
-                inferenceStartTime = Date.now()
-              }
-              const elapsed = (Date.now() - inferenceStartTime) / 1000
-              // Interpolate from 15% to 95% based on estimated time
-              const inferenceProgress = Math.min(elapsed / estimatedInferenceTime, 0.95)
-              displayProgress = 15 + Math.floor(inferenceProgress * 80)
-            }
-
-            // Keep API/local completion as a terminal response state, not polling state.
-            // Polling complete means backend state is finalized, but request can still be in-flight.
-            if (data.phase === 'complete' || data.status === 'complete') {
-              displayProgress = 95
-              statusMessage = 'Finalizing...'
-            }
-            
-            lastPhase = data.phase
-            
-            setState(prev => ({
-              ...prev,
-              progress: displayProgress,
-              statusMessage,
-            }))
-          }
-        } catch {
-          // Ignore polling errors
-        }
-      }
-      
-      progressInterval = setInterval(pollProgress, 500)
-
-      // Start generation (HTTP POST - synchronous, returns when done)
-      const response = await fetch(`${backendUrl}/api/generate`, {
+      const response = await fetch(`${backendUrl}/api/queue/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: abortControllerRef.current.signal,
+        body: JSON.stringify({
+          type: 'video',
+          model: settings.model,
+          params,
+        }),
       })
-      shouldApplyPollingUpdates = false
 
       if (!response.ok) {
         const errorText = await response.text()
-        throw new Error(errorText || 'Generation failed')
+        throw new Error(errorText || 'Failed to submit video generation job')
       }
 
-      const result = await response.json()
-      
-      if (result.status === 'complete' && result.video_path) {
-        // Convert Windows path to proper file:// URL
-        const videoPathNormalized = result.video_path.replace(/\\/g, '/')
-        const fileUrl = videoPathNormalized.startsWith('/') ? `file://${videoPathNormalized}` : `file:///${videoPathNormalized}`
-        
-        setState({
-          isGenerating: false,
-          progress: 100,
-          statusMessage: 'Complete!',
-          videoUrl: fileUrl,
-          videoPath: result.video_path,  // Keep original path for API calls
-          imageUrl: null,
-          imageUrls: [],
-          error: null,
-        })
-      } else if (result.status === 'cancelled') {
-        setState(prev => ({
-          ...prev,
-          isGenerating: false,
-          statusMessage: 'Cancelled',
-        }))
-      } else if (result.error) {
-        throw new Error(result.error)
-      }
-
+      const result: { id: string; status: string } = await response.json()
+      activeJobIdRef.current = result.id
+      startPolling()
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        setState(prev => ({
-          ...prev,
-          isGenerating: false,
-          statusMessage: 'Cancelled',
-        }))
-      } else {
-        setState(prev => ({
-          ...prev,
-          isGenerating: false,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        }))
-      }
-    } finally {
-      shouldApplyPollingUpdates = false
-      if (progressInterval) {
-        clearInterval(progressInterval)
-      }
+      setState(prev => ({
+        ...prev,
+        isGenerating: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      }))
     }
-  }, [])
+  }, [startPolling])
 
   const cancel = useCallback(async () => {
-    // Abort the fetch request
-    abortControllerRef.current?.abort()
-    
-    // Also tell the backend to cancel
+    const jobId = activeJobIdRef.current
+    if (!jobId) return
+
     try {
       const backendUrl = await window.electronAPI.getBackendUrl()
-      await fetch(`${backendUrl}/api/generate/cancel`, {
+      await fetch(`${backendUrl}/api/queue/cancel/${jobId}`, {
         method: 'POST',
       })
-    } catch (e) {
+    } catch {
       // Ignore errors from cancel request
     }
-    
+
     setState(prev => ({
       ...prev,
       isGenerating: false,
@@ -292,13 +306,13 @@ export function useGeneration(): UseGenerationReturn {
         const response = await fetch(`${backendUrl}/api/settings`)
         if (response.ok) {
           const payload = await response.json()
-          if (!payload?.hasFalApiKey) {
+          if (!payload?.hasReplicateApiKey) {
             void refreshSettings()
             window.dispatchEvent(new CustomEvent('open-api-gateway', {
               detail: {
-                requiredKeys: ['fal'],
-                title: 'Connect FAL AI',
-                description: 'FAL AI is required for generating images with Z Image Turbo when API generations are enabled.',
+                requiredKeys: ['replicate'],
+                title: 'Connect Replicate',
+                description: 'Replicate is required for generating images when API generations are enabled.',
                 blocking: false,
               },
             }))
@@ -306,12 +320,12 @@ export function useGeneration(): UseGenerationReturn {
           }
         }
       } catch {
-        if (!appSettings.hasFalApiKey) {
+        if (!appSettings.hasReplicateApiKey) {
           window.dispatchEvent(new CustomEvent('open-api-gateway', {
             detail: {
-              requiredKeys: ['fal'],
-              title: 'Connect FAL AI',
-              description: 'FAL AI is required for generating images with Z Image Turbo when API generations are enabled.',
+              requiredKeys: ['replicate'],
+              title: 'Connect Replicate',
+              description: 'Replicate is required for generating images when API generations are enabled.',
               blocking: false,
             },
           }))
@@ -321,8 +335,9 @@ export function useGeneration(): UseGenerationReturn {
     }
 
     const numImages = settings.variations || 1
-    
-    setState({
+
+    setState(prev => ({
+      ...prev,
       isGenerating: true,
       progress: 0,
       statusMessage: numImages > 1 ? `Generating ${numImages} images...` : 'Generating image...',
@@ -331,123 +346,59 @@ export function useGeneration(): UseGenerationReturn {
       imageUrl: null,
       imageUrls: [],
       error: null,
-    })
-
-    abortControllerRef.current = new AbortController()
+    }))
 
     try {
       const backendUrl = await window.electronAPI.getBackendUrl()
 
-      // Skip prompt enhancement for T2I - use original prompt directly
-      const finalPrompt = prompt
-
       const dims = getImageDimensions(settings)
       const numSteps = settings.imageSteps || 4
 
-      // Poll for progress
-      const pollProgress = async () => {
-        try {
-          const res = await fetch(`${backendUrl}/api/generation/progress`)
-          if (res.ok) {
-            const data = await res.json()
-            const currentImage = data.currentStep || 0
-            const totalImages = data.totalSteps || numImages
-            setState(prev => ({
-              ...prev,
-              progress: data.progress,
-              statusMessage: data.phase === 'loading_model' 
-                ? 'Loading Z-Image Turbo model...' 
-                : data.phase === 'inference'
-                  ? numImages > 1 
-                    ? `Generating image ${currentImage + 1}/${totalImages}...`
-                    : 'Generating image...'
-                  : data.phase === 'complete'
-                    ? 'Complete!'
-                    : 'Generating...',
-            }))
-          }
-        } catch {
-          // Ignore polling errors
-        }
-      }
-      
-      const progressInterval = setInterval(pollProgress, 500)
-
-      const response = await fetch(`${backendUrl}/api/generate-image`, {
+      const response = await fetch(`${backendUrl}/api/queue/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: finalPrompt,
-          width: dims.width,
-          height: dims.height,
-          numSteps,
-          numImages,
+          type: 'image',
+          model: appSettings.imageModel || 'z-image-turbo',
+          params: {
+            prompt,
+            width: dims.width,
+            height: dims.height,
+            numSteps,
+            numImages,
+          },
         }),
-        signal: abortControllerRef.current.signal,
       })
-
-      clearInterval(progressInterval)
 
       if (!response.ok) {
         const errorText = await response.text()
-        throw new Error(errorText || 'Image generation failed')
+        throw new Error(errorText || 'Failed to submit image generation job')
       }
 
-      const result = await response.json()
-      
-      if (result.status === 'complete') {
-        // Handle both new format (image_paths array) and old format (single image_path)
-        let rawPaths: string[] = []
-        if (result.image_paths && Array.isArray(result.image_paths)) {
-          rawPaths = result.image_paths
-        } else if (result.image_path) {
-          rawPaths = [result.image_path]
-        }
-        
-        if (rawPaths.length > 0) {
-          // Convert all paths to file URLs
-          const fileUrls = rawPaths.map((path: string) => {
-            const imagePath = path.replace(/\\/g, '/')
-            return imagePath.startsWith('/') ? `file://${imagePath}` : `file:///${imagePath}`
-          })
-          
-          setState({
-            isGenerating: false,
-            progress: 100,
-            statusMessage: 'Complete!',
-            videoUrl: null,
-            videoPath: null,
-            imageUrl: fileUrls[0],  // First image for backwards compatibility
-            imageUrls: fileUrls,    // All images
-            error: null,
-          })
-        }
-      } else if (result.status === 'cancelled') {
-        setState(prev => ({
-          ...prev,
-          isGenerating: false,
-          statusMessage: 'Cancelled',
-        }))
-      } else if (result.error) {
-        throw new Error(result.error)
-      }
-
+      const result: { id: string; status: string } = await response.json()
+      activeJobIdRef.current = result.id
+      startPolling()
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        setState(prev => ({
-          ...prev,
-          isGenerating: false,
-          statusMessage: 'Cancelled',
-        }))
-      } else {
-        setState(prev => ({
-          ...prev,
-          isGenerating: false,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        }))
-      }
+      setState(prev => ({
+        ...prev,
+        isGenerating: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      }))
     }
-  }, [appSettings.hasFalApiKey, forceApiGenerations, refreshSettings])
+  }, [appSettings.hasReplicateApiKey, appSettings.imageModel, forceApiGenerations, refreshSettings, startPolling])
+
+  const clearQueue = useCallback(async () => {
+    try {
+      const backendUrl = await window.electronAPI.getBackendUrl()
+      const res = await fetch(`${backendUrl}/api/queue/clear`, { method: 'POST' })
+      if (res.ok) {
+        const data: { jobs: QueueJob[] } = await res.json()
+        setState(prev => ({ ...prev, jobs: data.jobs }))
+      }
+    } catch {
+      // Ignore errors
+    }
+  }, [])
 
   const reset = useCallback(() => {
     setState({
@@ -459,6 +410,8 @@ export function useGeneration(): UseGenerationReturn {
       imageUrl: null,
       imageUrls: [],
       error: null,
+      jobs: [],
+      lastModel: null,
     })
   }, [])
 
@@ -468,5 +421,6 @@ export function useGeneration(): UseGenerationReturn {
     generateImage,
     cancel,
     reset,
+    clearQueue,
   }
 }

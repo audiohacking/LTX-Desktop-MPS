@@ -2,20 +2,27 @@ import { useState } from 'react'
 import { Download, RefreshCw, ImageIcon, Video, Heart, Pencil, MoreHorizontal } from 'lucide-react'
 import { Button } from './ui/button'
 
+const MODEL_DISPLAY_NAMES: Record<string, string> = {
+  'z-image-turbo': 'Z-Image Turbo',
+  'nano-banana-2': 'Nano Banana 2',
+}
+
 interface ImageResultProps {
   imageUrl: string | null
   isGenerating: boolean
   progress: number
   statusMessage: string
   onCreateVideo: () => void
+  modelName?: string | null
 }
 
-export function ImageResult({ 
-  imageUrl, 
-  isGenerating, 
-  progress, 
+export function ImageResult({
+  imageUrl,
+  isGenerating,
+  progress,
   statusMessage,
-  onCreateVideo 
+  onCreateVideo,
+  modelName
 }: ImageResultProps) {
   const [isHovered, setIsHovered] = useState(false)
 
@@ -70,6 +77,14 @@ export function ImageResult({
               alt="Generated image"
               className="max-w-full max-h-full object-contain"
             />
+
+            {/* Model badge */}
+            {modelName && (
+              <div className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 z-10">
+                <div className="w-2 h-2 rounded-full bg-blue-400" />
+                <span className="text-[11px] font-medium text-white/80">{MODEL_DISPLAY_NAMES[modelName] || modelName}</span>
+              </div>
+            )}
             
             {/* Hover overlay - LTX Studio style */}
             <div 

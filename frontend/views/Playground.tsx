@@ -66,18 +66,19 @@ export function Playground() {
   const handleModeChange = (newMode: GenerationMode) => {
     setMode(newMode)
   }
-  const { 
-    isGenerating, 
-    progress, 
-    statusMessage, 
+  const {
+    isGenerating,
+    progress,
+    statusMessage,
     videoUrl,
     videoPath,
-    imageUrl, 
+    imageUrl,
     error: generationError,
     generate,
     generateImage,
     cancel,
     reset,
+    lastModel,
   } = useGeneration()
 
   const {
@@ -345,6 +346,7 @@ export function Playground() {
               progress={progress}
               statusMessage={statusMessage}
               onCreateVideo={handleCreateVideoFromImage}
+              modelName={lastModel}
             />
           ) : mode === 'retake' ? (
             <VideoPlayer
@@ -363,6 +365,7 @@ export function Playground() {
               isGenerating={isGenerating}
               progress={progress}
               statusMessage={statusMessage}
+              modelName={lastModel}
             />
           )}
         </div>
