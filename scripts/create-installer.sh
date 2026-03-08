@@ -105,9 +105,14 @@ echo "========================================"
 if [ "$UNPACK" = true ]; then
   case "$PLATFORM" in
     mac)
+      echo "Applying deep ad-hoc signature with entitlements..."
+      APP_PATH=$(find "$RELEASE_DIR/mac-arm64" -name "*.app" -maxdepth 1 | head -1)
+      if [ -n "$APP_PATH" ]; then
+        codesign --force --deep --sign - --entitlements "$PROJECT_DIR/resources/entitlements.mac.plist" "$APP_PATH"
+      fi
       echo ""
       echo "Unpacked app ready!"
-      echo "Run: open \"$RELEASE_DIR/mac-arm64/LTX Desktop.app\""
+      echo "Run: open \"$APP_PATH\""
       ;;
     win)
       echo ""

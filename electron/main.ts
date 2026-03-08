@@ -46,7 +46,7 @@ if (!gotLock) {
   app.whenReady().then(async () => {
     setupCSP()
     createWindow()
-    initAutoUpdater()
+    // initAutoUpdater()
     // Python setup + backend start are now driven by the renderer via IPC
 
     // Fire analytics event (no-op if user hasn't opted in)

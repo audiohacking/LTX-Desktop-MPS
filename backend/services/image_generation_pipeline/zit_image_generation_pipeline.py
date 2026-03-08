@@ -38,7 +38,9 @@ class ZitImageGenerationPipeline:
 
     def _resolve_generator_device(self) -> str:
         if self._cpu_offload_active:
-            return "cuda"
+            # When cpu offload is active, the generator should stay on the target device
+            # but we need to be careful with "cuda" vs "mps"
+            return self._device or "cpu"
         if self._device is not None:
             return self._device
 

@@ -6,7 +6,7 @@ from __future__ import annotations
 def decide_force_api_generations(system: str, cuda_available: bool, vram_gb: int | None) -> bool:
     """Return whether API-only generation must be forced for this runtime."""
     if system == "Darwin":
-        return True
+        return False
 
     if system == "Windows":
         if not cuda_available:
