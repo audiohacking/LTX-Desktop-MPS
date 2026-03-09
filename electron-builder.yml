@@ -94,5 +94,5 @@ dmg:
 
 publish:
   provider: github
-  owner: Lightricks
-  repo: ltx-desktop
+  owner: audiohacking
+  repo: LTX-Desktop-MPS
