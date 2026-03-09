@@ -1,0 +1,97 @@
+name: Build macOS DMG
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write  # required to upload assets to GitHub Releases
+
+jobs:
+  build-mac-dmg:
+    name: Build macOS DMG
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4.2.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "backend/uv.lock"
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache embedded Python environment
+        id: python-cache
+        uses: actions/cache@v4
+        with:
+          path: python-embed
+          key: python-embed-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('backend/uv.lock', 'backend/.python-version') }}
+
+      - name: Prepare embedded Python
+        if: steps.python-cache.outputs.cache-hit != 'true'
+        run: bash scripts/prepare-python.sh
+
+      - name: Generate Python dependency hash
+        run: shasum -a 256 backend/uv.lock | awk '{print $1}' > python-deps-hash.txt
+
+      - name: Build frontend
+        run: pnpm run build:frontend
+
+      - name: Build macOS DMG
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          # Publish to the GitHub Release only when triggered by a release event.
+          # For workflow_dispatch, the DMG is available as a workflow artifact below.
+          PUBLISH_MODE="never"
+          if [ "${{ github.event_name }}" = "release" ]; then
+            PUBLISH_MODE="always"
+          fi
+
+          # Build electron-builder argument list
+          BUILD_ARGS=(
+            "--mac"
+            "--publish" "$PUBLISH_MODE"
+            "--config.publish.owner=${{ github.repository_owner }}"
+            "--config.publish.repo=${{ github.event.repository.name }}"
+          )
+
+          # Skip code signing and notarization when secrets are not configured.
+          # This allows unsigned DMG builds without requiring an Apple Developer account.
+          if [ -z "$CSC_LINK" ] || [ -z "$APPLE_ID" ]; then
+            echo "::notice::Code signing secrets not configured — building unsigned DMG"
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+            BUILD_ARGS+=("--config.mac.notarize=false")
+          fi
+
+          pnpm exec electron-builder "${BUILD_ARGS[@]}"
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: release/*.dmg
+          if-no-files-found: error
+          retention-days: 30
