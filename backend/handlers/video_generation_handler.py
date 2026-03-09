@@ -78,6 +78,9 @@ class VideoGenerationHandler(StateHandlerBase):
         self._camera_motion_prompts = camera_motion_prompts
         self._default_negative_prompt = default_negative_prompt
 
+    def set_current_job_id(self, job_id: str | None) -> None:
+        self._generation.set_current_job_id(job_id)
+
     def generate(self, req: GenerateVideoRequest) -> GenerateVideoResponse:
         if should_video_generate_with_ltx_api(
             force_api_generations=self._config.force_api_generations,

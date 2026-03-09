@@ -55,14 +55,13 @@ class GpuJobExecutor:
     def execute(self, job: QueueJob) -> list[str]:
         logger.info("[QueueWorker] Executing GPU job %s (type=%s model=%s)", job.id, job.type, job.model)
         # Pass the queue job ID to the generation handler so it can sync progress
-        gen_handler = self._video._generation
-        gen_handler.set_current_job_id(job.id)
+        self._video.set_current_job_id(job.id)
         try:
             if job.type == "image":
                 return self._execute_image(job)
             return self._execute_video(job)
         finally:
-            gen_handler.set_current_job_id(None)
+            self._video.set_current_job_id(None)
 
     def _execute_video(self, job: QueueJob) -> list[str]:
         p = job.params
@@ -110,9 +109,8 @@ class ApiJobExecutor:
         self._image = image_generation
 
     def execute(self, job: QueueJob) -> list[str]:
-        logger.info("[QueueWorker] Executing API job %s (type=%s model=%s)", job.id, job.id, job.type, job.model)
-        gen_handler = self._video._generation
-        gen_handler.set_current_job_id(job.id)
+        logger.info("[QueueWorker] Executing API job %s (type=%s model=%s)", job.id, job.type, job.model)
+        self._video.set_current_job_id(job.id)
         try:
             if job.type == "image":
                 p = job.params
@@ -146,4 +144,4 @@ class ApiJobExecutor:
                     return [result.video_path]
                 return []
         finally:
-            gen_handler.set_current_job_id(None)
+            self._video.set_current_job_id(None)
