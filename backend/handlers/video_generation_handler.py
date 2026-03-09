@@ -96,7 +96,7 @@ def _inference_progress_tqdm(on_progress: object):
             pass
 
     class _ProgressTqdm(base_tqdm):  # type: ignore[reportUntypedBaseClass]
-        def update(self, n: int | None = 1) -> bool | None:
+        def update(self, n: float | None = 1) -> bool | None:
             out = super().update(n)
             if self.total and self.total > 0:
                 _callback(int(self.n), int(self.total))
@@ -104,7 +104,7 @@ def _inference_progress_tqdm(on_progress: object):
 
     patched: list[tuple[object, str, object]] = []
     for name, mod in list(sys.modules.items()):
-        if mod is None or "ltx_pipelines" not in name:
+        if "ltx_pipelines" not in name:
             continue
         if hasattr(mod, "tqdm"):
             old = getattr(mod, "tqdm")
