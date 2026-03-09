@@ -54,48 +54,19 @@ jobs:
       - name: Build frontend
         run: pnpm run build:frontend
 
-      - name: Build macOS app bundle (unsigned)
-        # Build the unpacked .app only — electron-builder signing is disabled entirely.
-        # Ad-hoc signing is applied in the next step via build/macos/codesign.sh.
-        id: build-app
+      - name: Build macOS DMG
+        # Build the .app and DMG in a single electron-builder invocation.
+        # The previous segmented approach (electron-builder --dir → codesign.sh →
+        # electron-builder --prepackaged) produced a broken Python environment at
+        # runtime. A single electron-builder pass correctly embeds python-embed/
+        # via extraResources without any post-signing interference.
+        # Signing and notarization are disabled; this produces an unsigned DMG
+        # suitable for testing (bypass Gatekeeper with: xattr -d com.apple.quarantine <App>).
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: |
-          pnpm exec electron-builder --mac --dir \
+          pnpm exec electron-builder --mac \
             --config.mac.notarize=false \
-            --config.publish.owner=${{ github.repository_owner }} \
-            --config.publish.repo=${{ github.event.repository.name }}
-
-          APP_PATH=$(find release/mac-* -name "*.app" -maxdepth 1 | head -1)
-          if [ -z "$APP_PATH" ]; then
-            echo "Error: No .app bundle found in release/"
-            exit 1
-          fi
-          echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
-
-      - name: Ad-hoc code sign the app bundle
-        # Signs all Mach-O binaries (Python natives, Electron frameworks, executables)
-        # and the app bundle using identity "-" (ad-hoc / self-signed).
-        # No Apple ID, no certificate, no notarization required.
-        # To use a real Developer ID certificate, set the MACOS_SIGNING_IDENTITY secret.
-        run: |
-          chmod +x build/macos/codesign.sh
-          ./build/macos/codesign.sh "${{ steps.build-app.outputs.app_path }}"
-        env:
-          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY || '-' }}
-
-      - name: Create DMG from signed app
-        # Packages the signed .app into a DMG using the electron-builder.yml layout.
-        # --prepackaged skips the build phase; electron-builder only creates the DMG.
-        # CSC_IDENTITY_AUTO_DISCOVERY=false prevents any re-signing attempt.
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: |
-          pnpm exec electron-builder --mac dmg \
-            --prepackaged "${{ steps.build-app.outputs.app_path }}" \
-            --config.mac.notarize=false \
-            --config.publish.owner=${{ github.repository_owner }} \
-            --config.publish.repo=${{ github.event.repository.name }} \
             --publish never
 
       - name: Upload DMG to GitHub Release
