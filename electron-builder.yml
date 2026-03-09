@@ -69,6 +69,8 @@ mac:
     - "/python/.*\\.(py|pyc|pyi|pxd|pyx|h|hpp|cpp|c|cuh|cu|tcl|txt|json|yaml|yml|toml|cfg|md|rst|html|css|enc|msg|cmake|gif|png|jpg|svg|xml|jinja|typed|al)$"
     - "/python/.*\\.dist-info/"
   extraResources:
+    - from: resources/icon.png
+      to: icon.png
     - from: python-embed
       to: python
       filter:
