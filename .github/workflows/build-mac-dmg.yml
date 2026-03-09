@@ -54,18 +54,49 @@ jobs:
       - name: Build frontend
         run: pnpm run build:frontend
 
-      - name: Build macOS DMG
-        # Build the .app and DMG in a single electron-builder invocation.
-        # The previous segmented approach (electron-builder --dir → codesign.sh →
-        # electron-builder --prepackaged) produced a broken Python environment at
-        # runtime. A single electron-builder pass correctly embeds python-embed/
-        # via extraResources without any post-signing interference.
-        # Signing and notarization are disabled; this produces an unsigned DMG
-        # suitable for testing (bypass Gatekeeper with: xattr -d com.apple.quarantine <App>).
+      - name: Build macOS app bundle (unsigned)
+        # Build the unpacked .app with python-embed embedded via extraResources.
+        # Signing is disabled here; ad-hoc signing is applied in the next step
+        # via build/macos/codesign.sh (without --options runtime, so no hardened
+        # runtime and no library validation that would block Python .so loading).
+        id: build-app
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: |
-          pnpm exec electron-builder --mac \
+          pnpm exec electron-builder --mac --dir \
+            --config.mac.notarize=false \
+            --publish never
+
+          APP_PATH=$(find release/mac-* -maxdepth 1 -name "*.app" | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "Error: No .app bundle found in release/"
+            exit 1
+          fi
+          echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Ad-hoc code sign the app bundle
+        # Signs the entire bundle with ad-hoc identity ("-") WITHOUT hardened
+        # runtime so macOS does not enforce library validation. Python can then
+        # load its pip-installed .so extensions. Because the whole bundle is
+        # consistently signed, "Open Anyway" in Privacy & Security approves
+        # the entire bundle including the embedded python3 binary — users do
+        # not need to run any shell commands (no xattr required).
+        # To use a real Developer ID certificate, set MACOS_SIGNING_IDENTITY.
+        run: |
+          chmod +x build/macos/codesign.sh
+          ./build/macos/codesign.sh "${{ steps.build-app.outputs.app_path }}"
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY || '-' }}
+
+      - name: Create DMG from signed app
+        # Packages the signed .app into a DMG using the electron-builder.yml layout.
+        # --prepackaged skips the app-build phase; electron-builder only creates the DMG.
+        # CSC_IDENTITY_AUTO_DISCOVERY=false prevents any re-signing attempt.
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          pnpm exec electron-builder --mac dmg \
+            --prepackaged "${{ steps.build-app.outputs.app_path }}" \
             --config.mac.notarize=false \
             --publish never
 
