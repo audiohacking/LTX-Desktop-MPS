@@ -5,9 +5,10 @@ from __future__ import annotations
 from runtime_config.runtime_policy import decide_force_api_generations
 
 
-def test_darwin_always_forces_api() -> None:
-    assert decide_force_api_generations(system="Darwin", cuda_available=True, vram_gb=24) is True
-    assert decide_force_api_generations(system="Darwin", cuda_available=False, vram_gb=None) is True
+def test_darwin_allows_local_mps_generation() -> None:
+    # Darwin supports MPS (Apple Silicon GPU), so local generation is allowed.
+    assert decide_force_api_generations(system="Darwin", cuda_available=True, vram_gb=24) is False
+    assert decide_force_api_generations(system="Darwin", cuda_available=False, vram_gb=None) is False
 
 
 def test_windows_without_cuda_forces_api() -> None:

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from api_types import (
     GenerateImageRequest,
     GenerateVideoRequest,
+    VideoCameraMotion,
 )
 from state.job_queue import QueueJob
 
@@ -23,11 +24,14 @@ def _str(params: dict[str, Any], key: str, default: str = "") -> str:
     return str(v) if v is not None else default
 
 
-def _bool(params: dict[str, Any], key: str, default: bool = False) -> bool:
-    v = params.get(key, default)
-    if isinstance(v, bool):
-        return v
-    return str(v).lower() in ("1", "true", "yes", "on")
+def _camera_motion(params: dict[str, Any]) -> VideoCameraMotion:
+    """Return the cameraMotion param, defaulting to 'none'. Cast is safe: values come from validated queue jobs."""
+    return cast(VideoCameraMotion, _str(params, "cameraMotion", "none"))
+
+
+def _aspect_ratio(params: dict[str, Any]) -> Literal["16:9", "9:16"]:
+    """Return the aspectRatio param, defaulting to '16:9'. Cast is safe: values come from validated queue jobs."""
+    return cast(Literal["16:9", "9:16"], _str(params, "aspectRatio", "16:9"))
 
 
 def _int(params: dict[str, Any], key: str, default: int = 0) -> int:
@@ -65,8 +69,8 @@ class GpuJobExecutor:
             duration=_str(p, "duration", "5"),
             fps=_str(p, "fps", "24"),
             audio=_str(p, "audio", "false"),
-            cameraMotion=_str(p, "cameraMotion", "none"),
-            aspectRatio=_str(p, "aspectRatio", "16:9"),
+            cameraMotion=_camera_motion(p),
+            aspectRatio=_aspect_ratio(p),
             model=job.model,
             negativePrompt=_str(p, "negativePrompt"),
         )
@@ -123,8 +127,8 @@ class ApiJobExecutor:
                 duration=_str(p, "duration", "5"),
                 fps=_str(p, "fps", "24"),
                 audio=_str(p, "audio", "false"),
-                cameraMotion=_str(p, "cameraMotion", "none"),
-                aspectRatio=_str(p, "aspectRatio", "16:9"),
+                cameraMotion=_camera_motion(p),
+                aspectRatio=_aspect_ratio(p),
                 model=job.model,
                 negativePrompt=_str(p, "negativePrompt"),
             )
