@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from api_types import CancelResponse, GenerationProgressResponse
 from handlers.base import StateHandlerBase, with_state_lock
@@ -17,11 +17,23 @@ from state.app_state_types import (
     GpuSlot,
 )
 
+if TYPE_CHECKING:
+    from threading import RLock
+    from state.app_state_types import AppState
+    from state.job_queue import JobQueue
+
 logger = logging.getLogger(__name__)
 GenerationSlot = Literal["gpu", "api"]
 
-
 class GenerationHandler(StateHandlerBase):
+    def __init__(self, state: AppState, lock: RLock, job_queue: JobQueue | None = None) -> None:
+        super().__init__(state, lock)
+        self._job_queue = job_queue
+        self._current_job_id: str | None = None
+
+    def set_current_job_id(self, job_id: str | None) -> None:
+        self._current_job_id = job_id or None
+
     @with_state_lock
     def start_generation(self, generation_id: str) -> None:
         if self.is_generation_running():
@@ -91,6 +103,14 @@ class GenerationHandler(StateHandlerBase):
         current_step: int | None = None,
         total_steps: int | None = None,
     ) -> None:
+        # Sync to the persistent JobQueue if we have a job context
+        if self._job_queue and self._current_job_id:
+            self._job_queue.update_job(
+                self._current_job_id,
+                progress=progress,
+                phase=phase,
+            )
+
         match self._running_slot():
             case "gpu":
                 match self.state.gpu_slot:

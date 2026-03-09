@@ -54,9 +54,15 @@ class GpuJobExecutor:
 
     def execute(self, job: QueueJob) -> list[str]:
         logger.info("[QueueWorker] Executing GPU job %s (type=%s model=%s)", job.id, job.type, job.model)
-        if job.type == "image":
-            return self._execute_image(job)
-        return self._execute_video(job)
+        # Pass the queue job ID to the generation handler so it can sync progress
+        gen_handler = self._video._generation
+        gen_handler.set_current_job_id(job.id)
+        try:
+            if job.type == "image":
+                return self._execute_image(job)
+            return self._execute_video(job)
+        finally:
+            gen_handler.set_current_job_id(None)
 
     def _execute_video(self, job: QueueJob) -> list[str]:
         p = job.params
@@ -104,35 +110,40 @@ class ApiJobExecutor:
         self._image = image_generation
 
     def execute(self, job: QueueJob) -> list[str]:
-        logger.info("[QueueWorker] Executing API job %s (type=%s model=%s)", job.id, job.type, job.model)
-        if job.type == "image":
-            p = job.params
-            req = GenerateImageRequest(
-                prompt=_str(p, "prompt"),
-                width=_int(p, "width", 1920),
-                height=_int(p, "height", 1080),
-                numImages=_int(p, "numImages", 1),
-                numSteps=_int(p, "numSteps", 4),
-            )
-            result = self._image.generate(req)
-            return list(result.image_paths or [])
-        else:
-            p = job.params
-            req = GenerateVideoRequest(
-                prompt=_str(p, "prompt"),
-                imagePath=_str(p, "imagePath") or None,
-                lastFramePath=_str(p, "lastFramePath") or None,
-                audioPath=_str(p, "audioPath") or None,
-                resolution=_str(p, "resolution", "540p"),
-                duration=_str(p, "duration", "5"),
-                fps=_str(p, "fps", "24"),
-                audio=_str(p, "audio", "false"),
-                cameraMotion=_camera_motion(p),
-                aspectRatio=_aspect_ratio(p),
-                model=job.model,
-                negativePrompt=_str(p, "negativePrompt"),
-            )
-            result = self._video.generate(req)
-            if result.video_path:
-                return [result.video_path]
-            return []
+        logger.info("[QueueWorker] Executing API job %s (type=%s model=%s)", job.id, job.id, job.type, job.model)
+        gen_handler = self._video._generation
+        gen_handler.set_current_job_id(job.id)
+        try:
+            if job.type == "image":
+                p = job.params
+                req = GenerateImageRequest(
+                    prompt=_str(p, "prompt"),
+                    width=_int(p, "width", 1920),
+                    height=_int(p, "height", 1080),
+                    numImages=_int(p, "numImages", 1),
+                    numSteps=_int(p, "numSteps", 4),
+                )
+                result = self._image.generate(req)
+                return list(result.image_paths or [])
+            else:
+                p = job.params
+                req = GenerateVideoRequest(
+                    prompt=_str(p, "prompt"),
+                    imagePath=_str(p, "imagePath") or None,
+                    lastFramePath=_str(p, "lastFramePath") or None,
+                    audioPath=_str(p, "audioPath") or None,
+                    resolution=_str(p, "resolution", "540p"),
+                    duration=_str(p, "duration", "5"),
+                    fps=_str(p, "fps", "24"),
+                    audio=_str(p, "audio", "false"),
+                    cameraMotion=_camera_motion(p),
+                    aspectRatio=_aspect_ratio(p),
+                    model=job.model,
+                    negativePrompt=_str(p, "negativePrompt"),
+                )
+                result = self._video.generate(req)
+                if result.video_path:
+                    return [result.video_path]
+                return []
+        finally:
+            gen_handler.set_current_job_id(None)

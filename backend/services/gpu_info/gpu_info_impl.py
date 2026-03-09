@@ -79,10 +79,16 @@ class GpuInfoImpl:
         if self.get_mps_available():
             chip = self._get_macos_chip_name()
             name = f"{chip} (MPS)" if chip else "Apple Silicon (MPS)"
+            vram_used = 0
+            try:
+                # torch.mps.current_allocated_memory() provides allocated memory in bytes
+                vram_used = torch.mps.current_allocated_memory() // (1024 * 1024)
+            except Exception:
+                pass
             return {
                 "name": name,
                 "vram": self._get_system_ram_mb(),
-                "vramUsed": 0,
+                "vramUsed": vram_used,
             }
 
         return {"name": "Unknown", "vram": 0, "vramUsed": 0}

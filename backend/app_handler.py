@@ -162,7 +162,10 @@ class AppHandler:
             device=config.device,
         )
 
-        self.generation = GenerationHandler(state=self.state, lock=self._lock)
+        from state.job_queue import JobQueue
+        self.job_queue = JobQueue(persistence_path=config.settings_file.parent / "job_queue.json")
+
+        self.generation = GenerationHandler(state=self.state, lock=self._lock, job_queue=self.job_queue)
 
         self.video_generation = VideoGenerationHandler(
             state=self.state,
@@ -242,9 +245,6 @@ class AppHandler:
         self.gallery = GalleryHandler(outputs_dir=config.outputs_dir)
 
         self.downloads.cleanup_downloading_dir()
-
-        from state.job_queue import JobQueue
-        self.job_queue = JobQueue(persistence_path=config.settings_file.parent / "job_queue.json")
 
         # Wire up the QueueWorker with concrete executors so submitted jobs
         # are dispatched to the appropriate generation handler.
