@@ -7,10 +7,12 @@ import { logger } from '../lib/logger'
 
 type FilterType = 'all' | 'images' | 'videos'
 
+/** API returns path (filesystem) and url (relative API path). We use path for file:// URLs so media loads in Electron. */
 interface GalleryItem {
   id: string
   filename: string
   type: 'image' | 'video'
+  path: string
   url: string
   thumbnail?: string
   model?: string
@@ -18,11 +20,9 @@ interface GalleryItem {
   created_at: string
 }
 
-interface GalleryResponse {
-  items: GalleryItem[]
-  total: number
-  page: number
-  per_page: number
+function pathToFileUrl(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/')
+  return normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`
 }
 
 function formatFileSize(bytes?: number): string {
@@ -60,8 +60,35 @@ export function Gallery() {
       const backendUrl = await window.electronAPI.getBackendUrl()
       const res = await fetch(`${backendUrl}/api/gallery/local?page=${page}&per_page=${perPage}&type=${filter}`)
       if (!res.ok) throw new Error(`Failed to fetch gallery: ${res.status}`)
-      const data = (await res.json()) as GalleryResponse
-      setItems(data.items)
+      const data = (await res.json()) as {
+        items: Array<{
+          id: string
+          filename: string
+          type: 'image' | 'video'
+          path: string
+          url: string
+          thumbnail?: string
+          size_bytes: number
+          model_name: string | null
+          created_at: string
+        }>
+        total: number
+        page: number
+        per_page: number
+      }
+      setItems(
+        data.items.map((it) => ({
+          id: it.id,
+          filename: it.filename,
+          type: it.type,
+          path: it.path,
+          url: pathToFileUrl(it.path),
+          thumbnail: it.thumbnail,
+          file_size: it.size_bytes,
+          model: it.model_name ?? undefined,
+          created_at: it.created_at,
+        }))
+      )
       setTotal(data.total)
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to load gallery'
@@ -291,8 +318,8 @@ export function Gallery() {
                 size="sm"
                 className="border-zinc-700"
                 onClick={() => {
-                  if (previewItem.url) {
-                    void window.electronAPI.showItemInFolder(previewItem.url)
+                  if (previewItem.path) {
+                    void window.electronAPI.showItemInFolder(previewItem.path)
                   }
                 }}
               >

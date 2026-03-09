@@ -109,6 +109,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   writeLog: (level: string, message: string): Promise<void> =>
     ipcRenderer.invoke('write-log', level, message),
 
+  // Forward console.log/error/warn to main process (session log + terminal)
+  sendRendererLog: (level: 'log' | 'info' | 'warn' | 'error', ...args: unknown[]) => {
+    ipcRenderer.send('renderer-console', level, args)
+  },
+
   // Analytics
   getAnalyticsState: (): Promise<{ analyticsEnabled: boolean; installationId: string }> =>
     ipcRenderer.invoke('get-analytics-state'),
@@ -179,6 +184,7 @@ declare global {
       onBackendHealthStatus: (cb: (data: BackendHealthStatus) => void) => (() => void)
       extractVideoFrame: (videoUrl: string, seekTime: number, width?: number, quality?: number) => Promise<{ path: string; url: string }>
       writeLog: (level: string, message: string) => Promise<void>
+      sendRendererLog: (level: 'log' | 'info' | 'warn' | 'error', ...args: unknown[]) => void
       getAnalyticsState: () => Promise<{ analyticsEnabled: boolean; installationId: string }>
       setAnalyticsEnabled: (enabled: boolean) => Promise<void>
       sendAnalyticsEvent: (eventName: string, extraDetails?: Record<string, unknown> | null) => Promise<void>

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import tempfile
 import time
 import uuid
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from threading import RLock
@@ -52,6 +54,70 @@ def _get_allowed_durations(model_id: str, resolution_label: str, fps: int) -> se
     if model_id == "ltx-2-3-fast" and resolution_label == "1080p" and fps in {24, 25}:
         return {6, 8, 10, 12, 14, 16, 18, 20}
     return {6, 8, 10}
+
+
+# Fast pipeline inference progress: 8 steps (stage 1) + 3 steps (stage 2) + 1 step (stage 3) = 12 total
+_INFERENCE_TOTAL_STEPS = 12
+
+
+@contextmanager
+def _inference_progress_tqdm(on_progress: object):
+    """Temporarily patch tqdm in ltx_pipelines modules so inference progress is reported.
+
+    Runs in the app's embedded Python backend (single process). We only patch already-loaded
+    modules and use tqdm (a backend dependency); no extra installs or subprocesses.
+
+    on_progress(current_step: int, total_steps: int) is called as the pipeline's tqdm bars update.
+    """
+    try:
+        from tqdm.auto import tqdm as base_tqdm  # type: ignore[reportMissingImports]
+    except ImportError:
+        yield
+        return
+
+    # Track completed steps across multiple tqdm bars (8, 3, 1). Bars are updated in order.
+    segment_totals = [8, 3, 1]
+    current_segment = 0
+    completed_steps = 0
+
+    def _callback(n: int, total: int) -> None:
+        nonlocal current_segment, completed_steps
+        if total <= 0:
+            return
+        # Map this bar to a segment (assume order: 8, 3, 1)
+        if current_segment < len(segment_totals) and total == segment_totals[current_segment]:
+            prev_total = sum(segment_totals[:current_segment])
+            completed_steps = prev_total + min(n, total)
+            if n >= total:
+                current_segment += 1
+        try:
+            on_progress(completed_steps, _INFERENCE_TOTAL_STEPS)  # type: ignore[misc]
+        except Exception:
+            pass
+
+    class _ProgressTqdm(base_tqdm):  # type: ignore[reportUntypedBaseClass]
+        def update(self, n: float | None = 1) -> bool | None:
+            out = super().update(n)
+            if self.total and self.total > 0:
+                _callback(int(self.n), int(self.total))
+            return out
+
+    patched: list[tuple[object, str, object]] = []
+    for name, mod in list(sys.modules.items()):
+        if "ltx_pipelines" not in name:
+            continue
+        if hasattr(mod, "tqdm"):
+            old = getattr(mod, "tqdm")
+            setattr(mod, "tqdm", _ProgressTqdm)
+            patched.append((mod, "tqdm", old))
+    try:
+        yield
+    finally:
+        for mod, attr, old in patched:
+            try:
+                setattr(mod, attr, old)
+            except Exception:
+                pass
 
 
 class VideoGenerationHandler(StateHandlerBase):
@@ -221,17 +287,25 @@ class VideoGenerationHandler(StateHandlerBase):
             height = round(height / 64) * 64
             width = round(width / 64) * 64
 
+            def _on_inference_step(current_step: int, inference_total: int) -> None:
+                if inference_total <= 0:
+                    return
+                # Map inference steps (0..12) to progress 15%..100%
+                pct = 15 + int((current_step / inference_total) * 85)
+                self._generation.update_progress("inference", min(99, pct), current_step, inference_total)
+
             t_inference_start = time.perf_counter()
-            pipeline_state.pipeline.generate(
-                prompt=enhanced_prompt,
-                seed=seed,
-                height=height,
-                width=width,
-                num_frames=num_frames,
-                frame_rate=fps,
-                images=images,
-                output_path=str(output_path),
-            )
+            with _inference_progress_tqdm(_on_inference_step):
+                pipeline_state.pipeline.generate(
+                    prompt=enhanced_prompt,
+                    seed=seed,
+                    height=height,
+                    width=width,
+                    num_frames=num_frames,
+                    frame_rate=fps,
+                    images=images,
+                    output_path=str(output_path),
+                )
             t_inference_end = time.perf_counter()
             logger.info("[%s] Inference: %.2fs", gen_mode, t_inference_end - t_inference_start)
 

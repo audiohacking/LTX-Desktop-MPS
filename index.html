@@ -33,6 +33,7 @@
           showItemInFolder: noop,
           getLogs: () => Promise.resolve({ logPath: '', lines: [] }),
           getLogPath: () => Promise.resolve({ logPath: '', logDir: '' }),
+          sendRendererLog: () => {},
           openLogFolder: () => Promise.resolve(true),
           getResourcePath: () => Promise.resolve(null),
           getDownloadsPath: () => Promise.resolve('C:/downloads'),

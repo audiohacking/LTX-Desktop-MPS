@@ -6,6 +6,7 @@ import { AppSettingsProvider, useAppSettings } from './contexts/AppSettingsConte
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal'
 import { useBackend } from './hooks/use-backend'
 import { logger } from './lib/logger'
+import { initConsoleForward } from './lib/console-forward'
 import { Home } from './views/Home'
 import { Project } from './views/Project'
 import { Playground } from './views/Playground'
@@ -54,6 +55,10 @@ function AppContent() {
   const isBackendRestarting = processStatus === 'restarting'
   const isBackendDead = processStatus === 'dead'
   const waitingForRuntimePolicy = processStatus === 'alive' && !runtimePolicyLoaded
+
+  useEffect(() => {
+    initConsoleForward()
+  }, [])
 
   useEffect(() => {
     const handler = (e: Event) => {

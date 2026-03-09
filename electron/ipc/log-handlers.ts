@@ -5,7 +5,28 @@ import { logger, writeLog } from '../logger'
 
 const VALID_LOG_LEVELS = new Set(['INFO', 'WARNING', 'ERROR', 'DEBUG'])
 
+function formatRendererArgs(args: unknown[]): string {
+  return args
+    .map((a) => (typeof a === 'object' && a !== null ? JSON.stringify(a) : String(a)))
+    .join(' ')
+}
+
 export function registerLogHandlers(): void {
+  ipcMain.on('renderer-console', (_event, level: string, args: unknown[]) => {
+    const message = formatRendererArgs(Array.isArray(args) ? args : [args])
+    const tag = '[Renderer]'
+    if (level === 'error') {
+      logger.error(`${tag} ${message}`)
+      writeLog('ERROR', `${tag} ${message}`)
+    } else if (level === 'warn') {
+      logger.warn(`${tag} ${message}`)
+      writeLog('WARNING', `${tag} ${message}`)
+    } else {
+      logger.info(`${tag} ${message}`)
+      writeLog('INFO', `${tag} ${message}`)
+    }
+  })
+
   ipcMain.handle('write-log', async (_event, level: string, message: string) => {
     const upperLevel = String(level).toUpperCase()
     if (!VALID_LOG_LEVELS.has(upperLevel)) return
