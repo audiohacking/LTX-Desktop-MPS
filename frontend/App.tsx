@@ -21,6 +21,7 @@ import { PythonSetup } from './components/PythonSetup'
 import { SettingsModal, type SettingsTabId } from './components/SettingsModal'
 import { LogViewer } from './components/LogViewer'
 import { ApiGatewayModal, type ApiGatewaySection } from './components/ApiGatewayModal'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { Button } from './components/ui/button'
 
 type SetupState = 'loading' | { needsSetup: boolean; needsLicense: boolean }
@@ -545,13 +546,15 @@ function AppContent() {
 
 export default function App() {
   return (
-    <ProjectProvider>
-      <KeyboardShortcutsProvider>
-        <AppSettingsProvider>
-          <AppContent />
-          <KeyboardShortcutsModal />
-        </AppSettingsProvider>
-      </KeyboardShortcutsProvider>
-    </ProjectProvider>
+    <ErrorBoundary fallbackTitle="App error">
+      <ProjectProvider>
+        <KeyboardShortcutsProvider>
+          <AppSettingsProvider>
+            <AppContent />
+            <KeyboardShortcutsModal />
+          </AppSettingsProvider>
+        </KeyboardShortcutsProvider>
+      </ProjectProvider>
+    </ErrorBoundary>
   )
 }
