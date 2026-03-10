@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { GenerationSettings } from '../components/SettingsPanel'
 import { useAppSettings } from '../contexts/AppSettingsContext'
+import { backendFetch } from '../lib/backend'
 
 export interface QueueJob {
   id: string
@@ -127,8 +128,7 @@ export function useGeneration(): UseGenerationReturn {
 
     const poll = async () => {
       try {
-        const backendUrl = await window.electronAPI.getBackendUrl()
-        const res = await fetch(`${backendUrl}/api/queue/status`)
+        const res = await backendFetch('/api/queue/status')
         if (!res.ok) return
         const data: { jobs: QueueJob[] } = await res.json()
         const jobs: QueueJob[] = data.jobs
@@ -235,8 +235,6 @@ export function useGeneration(): UseGenerationReturn {
     }))
 
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
-
       const params: Record<string, unknown> = {
         prompt,
         duration: String(settings.duration),
@@ -256,7 +254,7 @@ export function useGeneration(): UseGenerationReturn {
         params.lastFramePath = lastFramePath
       }
 
-      const response = await fetch(`${backendUrl}/api/queue/submit`, {
+      const response = await backendFetch('/api/queue/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -288,8 +286,7 @@ export function useGeneration(): UseGenerationReturn {
     if (!jobId) return
 
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
-      await fetch(`${backendUrl}/api/queue/cancel/${jobId}`, {
+      await backendFetch(`/api/queue/cancel/${jobId}`, {
         method: 'POST',
       })
     } catch {
@@ -309,8 +306,7 @@ export function useGeneration(): UseGenerationReturn {
   ) => {
     if (forceApiGenerations) {
       try {
-        const backendUrl = await window.electronAPI.getBackendUrl()
-        const response = await fetch(`${backendUrl}/api/settings`)
+        const response = await backendFetch('/api/settings')
         if (response.ok) {
           const payload = await response.json()
           if (!payload?.hasReplicateApiKey) {
@@ -356,12 +352,10 @@ export function useGeneration(): UseGenerationReturn {
     }))
 
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
-
       const dims = getImageDimensions(settings)
       const numSteps = settings.imageSteps || 4
 
-      const response = await fetch(`${backendUrl}/api/queue/submit`, {
+      const response = await backendFetch('/api/queue/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -396,8 +390,7 @@ export function useGeneration(): UseGenerationReturn {
 
   const clearQueue = useCallback(async () => {
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
-      const res = await fetch(`${backendUrl}/api/queue/clear`, { method: 'POST' })
+      const res = await backendFetch('/api/queue/clear', { method: 'POST' })
       if (res.ok) {
         const data: { jobs: QueueJob[] } = await res.json()
         setState(prev => ({ ...prev, jobs: data.jobs }))

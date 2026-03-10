@@ -42,8 +42,7 @@ export function PromptLibrary() {
     setLoading(true)
     setError(null)
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
-      const res = await fetch(`${backendUrl}/api/prompts`)
+      const res = await (await import('../lib/backend')).backendFetch('/api/prompts')
       if (!res.ok) throw new Error(`Failed to fetch prompts: ${res.status}`)
       const data = (await res.json()) as { prompts: SavedPrompt[] }
       setPrompts(data.prompts ?? [])
@@ -74,9 +73,8 @@ export function PromptLibrary() {
     if (!formText.trim()) return
     setSaving(true)
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
       const tags = formTags.split(',').map(t => t.trim()).filter(Boolean)
-      const res = await fetch(`${backendUrl}/api/prompts`, {
+      const res = await (await import('../lib/backend')).backendFetch('/api/prompts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: formText.trim(), tags }),

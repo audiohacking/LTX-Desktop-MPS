@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { backendFetch, getBackend } from '../lib/backend'
 
 export interface InferenceSettings {
   steps: number
@@ -110,7 +111,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
   const [backendProcessStatus, setBackendProcessStatus] = useState<BackendProcessStatus | null>(null)
 
   useEffect(() => {
-    window.electronAPI.getBackendUrl().then(setBackendUrl).catch(() => setBackendUrl(null))
+    getBackend().then(({ url }) => setBackendUrl(url)).catch(() => setBackendUrl(null))
   }, [])
 
   useEffect(() => {
@@ -121,7 +122,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 
     const fetchRuntimePolicy = async () => {
       try {
-        const response = await fetch(`${backendUrl}/api/runtime-policy`)
+        const response = await backendFetch('/api/runtime-policy')
         if (!response.ok) {
           throw new Error(`Runtime policy fetch failed with status ${response.status}`)
         }
@@ -184,7 +185,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 
   const refreshSettings = useCallback(async () => {
     if (!backendUrl) return
-    const response = await fetch(`${backendUrl}/api/settings`)
+    const response = await backendFetch('/api/settings')
     if (!response.ok) {
       throw new Error(`Settings fetch failed with status ${response.status}`)
     }
@@ -223,7 +224,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     const syncTimer = setTimeout(async () => {
       try {
         const { hasLtxApiKey: _a, hasReplicateApiKey: _b, hasGeminiApiKey: _c, hasPaletteApiKey: _d, ...syncPayload } = settings
-        await fetch(`${backendUrl}/api/settings`, {
+        await backendFetch('/api/settings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(syncPayload),
@@ -245,7 +246,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 
   const saveLtxApiKey = useCallback(async (value: string) => {
     if (!backendUrl) return
-    const response = await fetch(`${backendUrl}/api/settings`, {
+    const response = await backendFetch('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ltxApiKey: value }),
@@ -259,7 +260,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 
   const saveGeminiApiKey = useCallback(async (value: string) => {
     if (!backendUrl) return
-    const response = await fetch(`${backendUrl}/api/settings`, {
+    const response = await backendFetch('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ geminiApiKey: value }),
@@ -273,7 +274,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 
   const saveReplicateApiKey = useCallback(async (value: string) => {
     if (!backendUrl) return
-    const response = await fetch(`${backendUrl}/api/settings`, {
+    const response = await backendFetch('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ replicateApiKey: value }),
@@ -287,7 +288,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 
   const savePaletteApiKey = useCallback(async (value: string) => {
     if (!backendUrl) return
-    const response = await fetch(`${backendUrl}/api/settings`, {
+    const response = await backendFetch('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ paletteApiKey: value }),

@@ -99,7 +99,7 @@ if use_sage_attention:
 # Constants & Paths
 # ============================================================
 
-PORT = 8000
+PORT = 0  # 0 = pick a free port; Electron parses "Server running on ..." for the actual URL
 
 
 def _get_device() -> torch.device:
@@ -219,7 +219,8 @@ runtime_config = RuntimeConfig(
 )
 
 handler = build_initial_state(runtime_config, DEFAULT_APP_SETTINGS)
-app = create_app(handler=handler, allowed_origins=DEFAULT_ALLOWED_ORIGINS)
+auth_token = os.environ.get("LTX_AUTH_TOKEN", "")
+app = create_app(handler=handler, allowed_origins=DEFAULT_ALLOWED_ORIGINS, auth_token=auth_token)
 
 
 def precache_model_files(model_dir: Path) -> int:
@@ -267,9 +268,11 @@ def log_hardware_info() -> None:
 
 
 if __name__ == "__main__":
+    import asyncio
+    import socket as _socket
     import uvicorn
 
-    port = int(os.environ.get("LTX_PORT", PORT))
+    port = int(os.environ.get("LTX_PORT", "") or PORT)
     logger.info("=" * 60)
     logger.info("LTX-2 Video Generation Server (FastAPI + Uvicorn)")
     log_hardware_info()
@@ -281,8 +284,13 @@ if __name__ == "__main__":
     queue_thread = threading.Thread(target=queue_worker_loop, daemon=True)
     queue_thread.start()
 
-    # Use our root logging config so uvicorn logs go to stdout (not its
-    # default stderr), letting Electron tag them correctly as INFO.
+    # Bind the socket ourselves so we know the actual port before uvicorn starts.
+    # Electron parses the "Server running on ..." line to get the backend URL.
+    sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+    sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+    sock.bind(("127.0.0.1", port))
+    actual_port = int(sock.getsockname()[1])
+
     log_config: dict[str, object] = {
         "version": 1,
         "disable_existing_loggers": False,
@@ -298,4 +306,18 @@ if __name__ == "__main__":
             "uvicorn.access": {"handlers": ["default"], "level": "INFO", "propagate": False},
         },
     }
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="info", access_log=False, log_config=log_config)
+    config = uvicorn.Config(
+        app, host="127.0.0.1", port=actual_port, log_level="info", access_log=False, log_config=log_config
+    )
+    server = uvicorn.Server(config)
+
+    _orig_startup = server.startup
+
+    async def _startup_with_ready_msg(sockets: list[_socket.socket] | None = None) -> None:
+        await _orig_startup(sockets=sockets)
+        if server.started:
+            print(f"Server running on http://127.0.0.1:{actual_port}", flush=True)
+
+    server.startup = _startup_with_ready_msg  # type: ignore[assignment]
+
+    asyncio.run(server.serve(sockets=[sock]))

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Loader2, CheckCircle2, Download, Clock, ChevronDown, AlertCircle } from 'lucide-react'
+import { backendFetch, getBackend } from '../lib/backend'
 import { logger } from '../lib/logger'
 
 interface ModelInfo {
@@ -47,7 +48,7 @@ export function ModelStatusDropdown({ className = '' }: ModelStatusDropdownProps
 
   // Fetch backend URL once on mount
   useEffect(() => {
-    window.electronAPI.getBackendUrl().then(setBackendUrl)
+    getBackend().then(({ url }) => setBackendUrl(url)).catch(() => setBackendUrl(null))
   }, [])
 
   // Fetch models status periodically
@@ -56,7 +57,7 @@ export function ModelStatusDropdown({ className = '' }: ModelStatusDropdownProps
 
     const fetchModelsStatus = async () => {
       try {
-        const response = await fetch(`${backendUrl}/api/models/status`)
+        const response = await backendFetch('/api/models/status')
         if (response.ok) {
           setModelsStatus(await response.json())
         }
@@ -76,7 +77,7 @@ export function ModelStatusDropdown({ className = '' }: ModelStatusDropdownProps
 
     const pollProgress = async () => {
       try {
-        const response = await fetch(`${backendUrl}/api/models/download/progress`)
+        const response = await backendFetch('/api/models/download/progress')
         if (response.ok) {
           setDownloadProgress(await response.json())
         }
@@ -137,7 +138,7 @@ export function ModelStatusDropdown({ className = '' }: ModelStatusDropdownProps
   const startDownload = async () => {
     if (!backendUrl) return
     try {
-      await fetch(`${backendUrl}/api/models/download`, {
+      await backendFetch('/api/models/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
