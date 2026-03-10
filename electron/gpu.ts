@@ -1,15 +1,18 @@
 import { execSync } from 'child_process'
-import { BACKEND_BASE_URL } from './config'
 import { logger } from './logger'
-import { getPythonPath } from './python-backend'
+import { getAuthToken, getBackendUrl, getPythonPath } from './python-backend'
 
 // Check if NVIDIA GPU is available
 export async function checkGPU(): Promise<{ available: boolean; name?: string; vram?: number }> {
   try {
-    // Try to get GPU info from the backend API first (more reliable)
-    const response = await fetch(`${BACKEND_BASE_URL}/api/gpu-info`, {
+    const url = getBackendUrl()
+    if (!url) throw new Error('Backend URL not available yet')
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const token = getAuthToken()
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    const response = await fetch(`${url}/api/gpu-info`, {
       method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
     })
 
     if (response.ok) {

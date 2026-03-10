@@ -204,8 +204,7 @@ export function useRegeneration(params: UseRegenerationParams) {
 
         if (framePath) {
           // Ask Gemini to describe the frame
-          const backendUrl = await window.electronAPI.getBackendUrl()
-          const resp = await fetch(`${backendUrl}/api/suggest-gap-prompt`, {
+          const resp = await (await import('../../lib/backend')).backendFetch('/api/suggest-gap-prompt', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

@@ -113,8 +113,7 @@ export function Playground() {
     if (!prompt.trim() || isEnhancing) return
     setIsEnhancing(true)
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
-      const res = await fetch(`${backendUrl}/api/enhance-prompt`, {
+      const res = await (await import('../lib/backend')).backendFetch('/api/enhance-prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, mode }),

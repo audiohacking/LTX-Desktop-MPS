@@ -3,6 +3,7 @@ import { ArrowLeft, Image as ImageIcon, Film, Trash2, CloudUpload, Download, X, 
 import { useProjects } from '../contexts/ProjectContext'
 import { LtxLogo } from '../components/LtxLogo'
 import { Button } from '../components/ui/button'
+import { backendFetch } from '../lib/backend'
 import { logger } from '../lib/logger'
 
 type FilterType = 'all' | 'images' | 'videos'
@@ -57,8 +58,7 @@ export function Gallery() {
     setLoading(true)
     setError(null)
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
-      const res = await fetch(`${backendUrl}/api/gallery/local?page=${page}&per_page=${perPage}&type=${filter}`)
+      const res = await backendFetch(`/api/gallery/local?page=${page}&per_page=${perPage}&type=${filter}`)
       if (!res.ok) throw new Error(`Failed to fetch gallery: ${res.status}`)
       const data = (await res.json()) as {
         items: Array<{
@@ -107,8 +107,7 @@ export function Gallery() {
   const handleDelete = async (item: GalleryItem) => {
     if (!confirm(`Delete "${item.filename}"?`)) return
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
-      const res = await fetch(`${backendUrl}/api/gallery/local/${item.id}`, { method: 'DELETE' })
+      const res = await backendFetch(`/api/gallery/local/${item.id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error(`Delete failed: ${res.status}`)
       setItems(prev => prev.filter(i => i.id !== item.id))
       setTotal(prev => prev - 1)

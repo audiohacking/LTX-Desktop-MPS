@@ -3,6 +3,7 @@ import { ArrowLeft, Plus, Pencil, Trash2, UserCircle, X } from 'lucide-react'
 import { useProjects } from '../contexts/ProjectContext'
 import { LtxLogo } from '../components/LtxLogo'
 import { Button } from '../components/ui/button'
+import { backendFetch } from '../lib/backend'
 import { logger } from '../lib/logger'
 
 /** Matches API: reference_image_paths are filesystem paths; we convert to file:// for <img src> */
@@ -42,8 +43,7 @@ export function Characters() {
     setLoading(true)
     setError(null)
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
-      const res = await fetch(`${backendUrl}/api/library/characters`)
+      const res = await backendFetch('/api/library/characters')
       if (!res.ok) throw new Error(`Failed to fetch characters: ${res.status}`)
       const data = (await res.json()) as { characters: unknown[] }
       setCharacters(
@@ -94,7 +94,6 @@ export function Characters() {
     if (!formName.trim()) return
     setSaving(true)
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
       const body = {
         name: formName.trim(),
         role: formRole.trim(),
@@ -102,14 +101,14 @@ export function Characters() {
         reference_image_paths: formImages,
       }
       if (editingCharacter) {
-        const res = await fetch(`${backendUrl}/api/library/characters/${editingCharacter.id}`, {
+        const res = await backendFetch(`/api/library/characters/${editingCharacter.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         })
         if (!res.ok) throw new Error(`Update failed: ${res.status}`)
       } else {
-        const res = await fetch(`${backendUrl}/api/library/characters`, {
+        const res = await backendFetch('/api/library/characters', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -128,8 +127,7 @@ export function Characters() {
   const handleDelete = async (char: Character) => {
     if (!confirm(`Delete character "${char.name}"?`)) return
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
-      const res = await fetch(`${backendUrl}/api/library/characters/${char.id}`, { method: 'DELETE' })
+      const res = await backendFetch(`/api/library/characters/${char.id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error(`Delete failed: ${res.status}`)
       setCharacters(prev => prev.filter(c => c.id !== char.id))
     } catch (e) {

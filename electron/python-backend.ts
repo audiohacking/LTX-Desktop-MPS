@@ -1,8 +1,9 @@
 import { ChildProcess, spawn } from 'child_process'
+import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
 import { getAppDataDir } from './app-paths'
-import { BACKEND_BASE_URL, getCurrentDir, isDev, PYTHON_PORT } from './config'
+import { getCurrentDir, isDev } from './config'
 import { logger, writeLog } from './logger'
 import { getPythonDir } from './python-setup'
 import { getMainWindow } from './window'
@@ -14,9 +15,22 @@ const CRASH_DEBOUNCE_MS = 10_000
 let startPromise: Promise<void> | null = null
 let takeoverInFlight: Promise<void> | null = null
 
+/** Resolved backend URL after "Server running on ..." is printed; used for health checks and frontend. */
+let resolvedBackendUrl: string | null = null
+/** Auth token passed to backend and frontend; empty when auth is disabled. */
+let backendAuthToken: string = ''
+
 type BackendOwnership = 'managed' | 'adopted' | null
 
 let backendOwnership: BackendOwnership = null
+
+export function getBackendUrl(): string | null {
+  return resolvedBackendUrl
+}
+
+export function getAuthToken(): string {
+  return backendAuthToken
+}
 
 export interface BackendHealthStatus {
   status: 'alive' | 'restarting' | 'dead'
@@ -51,12 +65,14 @@ function isPortConflictOutput(output: string): boolean {
 }
 
 async function probeBackendHealth(timeoutMs = 1500): Promise<boolean> {
+  const url = getBackendUrl()
+  if (!url) return false
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const response = await fetch(`${BACKEND_BASE_URL}/health`, {
-      signal: controller.signal,
-    })
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (backendAuthToken) headers['Authorization'] = `Bearer ${backendAuthToken}`
+    const response = await fetch(`${url}/health`, { signal: controller.signal, headers })
     return response.ok
   } catch {
     return false
@@ -66,12 +82,17 @@ async function probeBackendHealth(timeoutMs = 1500): Promise<boolean> {
 }
 
 async function requestAdoptedBackendShutdown(timeoutMs = 2000): Promise<boolean> {
+  const url = getBackendUrl()
+  if (!url) return false
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const response = await fetch(`${BACKEND_BASE_URL}/api/system/shutdown`, {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (backendAuthToken) headers['Authorization'] = `Bearer ${backendAuthToken}`
+    const response = await fetch(`${url}/api/system/shutdown`, {
       method: 'POST',
       signal: controller.signal,
+      headers,
     })
     return response.ok
   } catch {
@@ -216,13 +237,17 @@ export async function startPythonBackend(): Promise<void> {
       pythonArgs = isDev ? ['-Xfrozen_modules=off', '-u', mainPy] : ['-u', mainPy]
     }
 
+    // Dynamic port: backend binds to 0 and prints "Server running on http://127.0.0.1:PORT"
+    resolvedBackendUrl = null
+    backendAuthToken = crypto.randomBytes(32).toString('hex')
+
     pythonProcess = spawn(pythonPath, pythonArgs, {
       cwd: backendPath,
       env: {
         ...process.env,
         PYTHONUNBUFFERED: '1',
         PYTHONNOUSERSITE: '1',
-        LTX_PORT: String(PYTHON_PORT),
+        LTX_AUTH_TOKEN: backendAuthToken,
         LTX_APP_DATA_DIR: getAppDataDir(),
         PYTORCH_ENABLE_MPS_FALLBACK: '1',
         // Set PYTHONHOME for bundled Python on macOS so it finds its stdlib
@@ -249,13 +274,17 @@ export async function startPythonBackend(): Promise<void> {
       reject(error)
     }
 
+    const serverReadyMatch = /Server running on (http:\/\/127\.0\.0\.1:\d+)/
+
     const checkStarted = (output: string) => {
       if (isPortConflictOutput(output)) {
         sawPortConflict = true
       }
 
-      // Check if server has started
-      if (!started && (output.includes('Server running on') || output.includes('Uvicorn running'))) {
+      // Backend prints "Server running on http://127.0.0.1:PORT" when ready (dynamic port)
+      const match = output.match(serverReadyMatch)
+      if (!started && match) {
+        resolvedBackendUrl = match[1]
         started = true
         backendOwnership = 'managed'
         publishBackendHealthStatus({ status: 'alive' })
@@ -295,6 +324,7 @@ export async function startPythonBackend(): Promise<void> {
     pythonProcess.on('exit', async (code) => {
       logger.info(`Python backend exited with code ${code}`)
       pythonProcess = null
+      resolvedBackendUrl = null
 
       if (!started) {
         if (isIntentionalShutdown) {
@@ -370,6 +400,7 @@ export async function startPythonBackend(): Promise<void> {
 export function stopPythonBackend(): void {
   if (pythonProcess) {
     isIntentionalShutdown = true
+    resolvedBackendUrl = null
     logger.info('Stopping Python backend...')
     const pid = pythonProcess.pid
     pythonProcess.kill('SIGTERM')

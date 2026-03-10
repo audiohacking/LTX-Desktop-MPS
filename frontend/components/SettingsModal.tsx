@@ -62,10 +62,10 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
     let cancelled = false
     const fetchStatus = async () => {
       try {
-        const backendUrl = await window.electronAPI.getBackendUrl()
+        const { backendFetch } = await import('../lib/backend')
         const [statusRes, creditsRes] = await Promise.all([
-          fetch(`${backendUrl}/api/sync/status`),
-          fetch(`${backendUrl}/api/sync/credits`),
+          backendFetch('/api/sync/status'),
+          backendFetch('/api/sync/credits'),
         ])
         if (cancelled) return
         if (statusRes.ok) setPaletteStatus(await statusRes.json())
@@ -113,8 +113,7 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
 
     const fetchStatus = async () => {
       try {
-        const backendUrl = await window.electronAPI.getBackendUrl()
-        const response = await fetch(`${backendUrl}/api/models/status`)
+        const response = await (await import('../lib/backend')).backendFetch('/api/models/status')
         if (response.ok) {
           const data = await response.json()
           setTextEncoderStatus(data.text_encoder_status)
@@ -135,8 +134,7 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
     setIsDownloading(true)
     setDownloadError(null)
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
-      const response = await fetch(`${backendUrl}/api/text-encoder/download`, { method: 'POST' })
+      const response = await (await import('../lib/backend')).backendFetch('/api/text-encoder/download', { method: 'POST' })
       const data = await response.json()
 
       if (data.status === 'already_downloaded') {
@@ -145,7 +143,7 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
       // Poll for completion
       const pollInterval = setInterval(async () => {
         try {
-          const statusRes = await fetch(`${backendUrl}/api/models/status`)
+          const statusRes = await (await import('../lib/backend')).backendFetch('/api/models/status')
           if (statusRes.ok) {
             const statusData = await statusRes.json()
             setTextEncoderStatus(statusData.text_encoder_status)

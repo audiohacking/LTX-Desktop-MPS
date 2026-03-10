@@ -164,27 +164,27 @@ function AssetCard({
         {/* Bottom controls for video */}
         {asset.type === 'video' && (
           <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
-            <div className="px-2 py-1 rounded-lg bg-black/50 backdrop-blur-md text-white text-xs font-mono">
-              {formatTime(currentTime)}
+            <div className="flex items-center gap-1.5">
+              <div className="px-2 py-1 rounded-lg bg-black/50 backdrop-blur-md text-white text-xs font-mono">
+                {formatTime(currentTime)}
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); setIsMuted(!isMuted) }}
+                className="p-1.5 rounded-lg bg-black/40 backdrop-blur-md text-white hover:bg-black/60 transition-colors"
+              >
+                {isMuted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+              </button>
             </div>
-            <button
-              onClick={(e) => { e.stopPropagation(); setIsMuted(!isMuted) }}
-              className="p-1.5 rounded-lg bg-black/40 backdrop-blur-md text-white hover:bg-black/60 transition-colors"
-            >
-              {isMuted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-            </button>
           </div>
         )}
-        
-        {/* Delete button (subtle, bottom right for images) */}
-        {asset.type === 'image' && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onDelete() }}
-            className="absolute bottom-2 right-2 p-1.5 rounded-lg bg-red-600/70 backdrop-blur-md text-white hover:bg-red-500 transition-colors opacity-0 group-hover:opacity-100"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        )}
+
+        {/* Delete button (subtle, bottom right for all asset types) */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete() }}
+          className="absolute bottom-2 right-2 p-1.5 rounded-lg bg-black/40 backdrop-blur-md text-white/70 hover:bg-red-500/80 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
       </div>
       
     </div>

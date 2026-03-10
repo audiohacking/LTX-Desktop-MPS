@@ -3,6 +3,7 @@ import { ArrowLeft, Plus, Trash2, ImageIcon, X } from 'lucide-react'
 import { useProjects } from '../contexts/ProjectContext'
 import { LtxLogo } from '../components/LtxLogo'
 import { Button } from '../components/ui/button'
+import { backendFetch } from '../lib/backend'
 import { logger } from '../lib/logger'
 
 type Category = 'all' | 'people' | 'places' | 'props' | 'other'
@@ -38,9 +39,8 @@ export function References() {
     setLoading(true)
     setError(null)
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
       const query = category !== 'all' ? `?category=${category}` : ''
-      const res = await fetch(`${backendUrl}/api/library/references${query}`)
+      const res = await backendFetch(`/api/library/references${query}`)
       if (!res.ok) throw new Error(`Failed to fetch references: ${res.status}`)
       const data = (await res.json()) as { references: unknown[] }
       setReferences(
@@ -79,8 +79,7 @@ export function References() {
     if (!formName.trim() || !formImage) return
     setSaving(true)
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
-      const res = await fetch(`${backendUrl}/api/library/references`, {
+      const res = await backendFetch('/api/library/references', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -102,8 +101,7 @@ export function References() {
   const handleDelete = async (ref: Reference) => {
     if (!confirm(`Delete reference "${ref.name}"?`)) return
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
-      const res = await fetch(`${backendUrl}/api/library/references/${ref.id}`, { method: 'DELETE' })
+      const res = await backendFetch(`/api/library/references/${ref.id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error(`Delete failed: ${res.status}`)
       setReferences(prev => prev.filter(r => r.id !== ref.id))
     } catch (e) {
