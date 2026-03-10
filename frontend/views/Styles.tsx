@@ -41,13 +41,16 @@ export function Styles() {
       if (!res.ok) throw new Error(`Failed to fetch styles: ${res.status}`)
       const data = (await res.json()) as { styles: unknown[] }
       setStyles(
-        (data.styles ?? []).map((s: Record<string, unknown>) => ({
-          id: String(s.id ?? ''),
-          name: String(s.name ?? ''),
-          description: String(s.description ?? ''),
-          reference_image_path: String(s.reference_image_path ?? s.reference_image ?? ''),
-          created_at: String(s.created_at ?? ''),
-        }))
+        (data.styles ?? []).map((s: unknown) => {
+          const row = s as Record<string, unknown>
+          return {
+            id: String(row.id ?? ''),
+            name: String(row.name ?? ''),
+            description: String(row.description ?? ''),
+            reference_image_path: String(row.reference_image_path ?? row.reference_image ?? ''),
+            created_at: String(row.created_at ?? ''),
+          }
+        })
       )
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to load styles'

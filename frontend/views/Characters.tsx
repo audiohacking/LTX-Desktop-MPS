@@ -47,14 +47,17 @@ export function Characters() {
       if (!res.ok) throw new Error(`Failed to fetch characters: ${res.status}`)
       const data = (await res.json()) as { characters: unknown[] }
       setCharacters(
-        (data.characters ?? []).map((c: Record<string, unknown>) => ({
-          id: String(c.id ?? ''),
-          name: String(c.name ?? ''),
-          role: String(c.role ?? ''),
-          description: String(c.description ?? ''),
-          reference_image_paths: safeImagePaths(c.reference_image_paths ?? c.reference_images ?? []),
-          created_at: String(c.created_at ?? ''),
-        }))
+        (data.characters ?? []).map((c: unknown) => {
+          const row = c as Record<string, unknown>
+          return {
+            id: String(row.id ?? ''),
+            name: String(row.name ?? ''),
+            role: String(row.role ?? ''),
+            description: String(row.description ?? ''),
+            reference_image_paths: safeImagePaths(row.reference_image_paths ?? row.reference_images ?? []),
+            created_at: String(row.created_at ?? ''),
+          }
+        })
       )
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to load characters'

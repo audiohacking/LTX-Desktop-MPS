@@ -44,13 +44,16 @@ export function References() {
       if (!res.ok) throw new Error(`Failed to fetch references: ${res.status}`)
       const data = (await res.json()) as { references: unknown[] }
       setReferences(
-        (data.references ?? []).map((r: Record<string, unknown>) => ({
-          id: String(r.id ?? ''),
-          name: String(r.name ?? ''),
-          category: (typeof r.category === 'string' ? r.category : 'other') as Exclude<Category, 'all'>,
-          image_path: String(r.image_path ?? r.image_url ?? ''),
-          created_at: String(r.created_at ?? ''),
-        }))
+        (data.references ?? []).map((r: unknown) => {
+          const row = r as Record<string, unknown>
+          return {
+            id: String(row.id ?? ''),
+            name: String(row.name ?? ''),
+            category: (typeof row.category === 'string' ? row.category : 'other') as Exclude<Category, 'all'>,
+            image_path: String(row.image_path ?? row.image_url ?? ''),
+            created_at: String(row.created_at ?? ''),
+          }
+        })
       )
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to load references'
