@@ -5,13 +5,24 @@ import { LtxLogo } from '../components/LtxLogo'
 import { Button } from '../components/ui/button'
 import { logger } from '../lib/logger'
 
+/** Matches API: reference_image_paths are filesystem paths; we convert to file:// for <img src> */
 interface Character {
   id: string
   name: string
   role: string
   description: string
-  reference_images: string[]
+  reference_image_paths: string[]
   created_at: string
+}
+
+function pathToFileUrl(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/')
+  return normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`
+}
+
+function safeImagePaths(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return raw.filter((x): x is string => typeof x === 'string' && x.length > 0)
 }
 
 export function Characters() {
@@ -34,8 +45,17 @@ export function Characters() {
       const backendUrl = await window.electronAPI.getBackendUrl()
       const res = await fetch(`${backendUrl}/api/library/characters`)
       if (!res.ok) throw new Error(`Failed to fetch characters: ${res.status}`)
-      const data = (await res.json()) as { characters: Character[] }
-      setCharacters(data.characters ?? [])
+      const data = (await res.json()) as { characters: unknown[] }
+      setCharacters(
+        (data.characters ?? []).map((c: Record<string, unknown>) => ({
+          id: String(c.id ?? ''),
+          name: String(c.name ?? ''),
+          role: String(c.role ?? ''),
+          description: String(c.description ?? ''),
+          reference_image_paths: safeImagePaths(c.reference_image_paths ?? c.reference_images ?? []),
+          created_at: String(c.created_at ?? ''),
+        }))
+      )
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to load characters'
       logger.error(msg)
@@ -63,7 +83,7 @@ export function Characters() {
     setFormName(char.name)
     setFormRole(char.role)
     setFormDescription(char.description)
-    setFormImages([...char.reference_images])
+    setFormImages([...char.reference_image_paths])
     setIsModalOpen(true)
   }
 
@@ -76,7 +96,7 @@ export function Characters() {
         name: formName.trim(),
         role: formRole.trim(),
         description: formDescription.trim(),
-        reference_images: formImages,
+        reference_image_paths: formImages,
       }
       if (editingCharacter) {
         const res = await fetch(`${backendUrl}/api/library/characters/${editingCharacter.id}`, {
@@ -182,14 +202,14 @@ export function Characters() {
                 key={char.id}
                 className="group bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-600 transition-all overflow-hidden"
               >
-                {/* Reference images */}
+                {/* Reference images (paths → file:// for renderer) */}
                 <div className="aspect-video bg-zinc-800 flex items-center justify-center overflow-hidden">
-                  {char.reference_images.length > 0 ? (
+                  {char.reference_image_paths.length > 0 ? (
                     <div className="grid grid-cols-2 w-full h-full">
-                      {char.reference_images.slice(0, 4).map((img, i) => (
+                      {char.reference_image_paths.slice(0, 4).map((path, i) => (
                         <img
                           key={i}
-                          src={img}
+                          src={pathToFileUrl(path)}
                           alt={`${char.name} ref ${i + 1}`}
                           className="w-full h-full object-cover"
                         />
@@ -283,9 +303,9 @@ export function Characters() {
               <div>
                 <label className="text-xs text-zinc-500 uppercase tracking-wider font-semibold mb-1.5 block">Reference Images</label>
                 <div className="flex flex-wrap gap-2 mb-2">
-                  {formImages.map((img, i) => (
+                  {formImages.map((path, i) => (
                     <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border border-zinc-700">
-                      <img src={img} alt="" className="w-full h-full object-cover" />
+                      <img src={pathToFileUrl(path)} alt="" className="w-full h-full object-cover" />
                       <button
                         onClick={() => setFormImages(prev => prev.filter((_, idx) => idx !== i))}
                         className="absolute top-0.5 right-0.5 bg-black/70 rounded p-0.5"

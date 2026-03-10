@@ -7,12 +7,19 @@ import { logger } from '../lib/logger'
 
 type Category = 'all' | 'people' | 'places' | 'props' | 'other'
 
+/** API uses image_path (filesystem path); we convert to file:// for <img src>. */
 interface Reference {
   id: string
   name: string
   category: Exclude<Category, 'all'>
-  image_url: string
+  image_path: string
   created_at: string
+}
+
+function pathToFileUrl(filePath: string): string {
+  if (!filePath || typeof filePath !== 'string') return ''
+  const normalized = filePath.replace(/\\/g, '/')
+  return normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`
 }
 
 export function References() {
@@ -35,8 +42,16 @@ export function References() {
       const query = category !== 'all' ? `?category=${category}` : ''
       const res = await fetch(`${backendUrl}/api/library/references${query}`)
       if (!res.ok) throw new Error(`Failed to fetch references: ${res.status}`)
-      const data = (await res.json()) as { references: Reference[] }
-      setReferences(data.references ?? [])
+      const data = (await res.json()) as { references: unknown[] }
+      setReferences(
+        (data.references ?? []).map((r: Record<string, unknown>) => ({
+          id: String(r.id ?? ''),
+          name: String(r.name ?? ''),
+          category: (typeof r.category === 'string' ? r.category : 'other') as Exclude<Category, 'all'>,
+          image_path: String(r.image_path ?? r.image_url ?? ''),
+          created_at: String(r.created_at ?? ''),
+        }))
+      )
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to load references'
       logger.error(msg)
@@ -68,7 +83,7 @@ export function References() {
         body: JSON.stringify({
           name: formName.trim(),
           category: formCategory,
-          image_url: formImage,
+          image_path: formImage,
         }),
       })
       if (!res.ok) throw new Error(`Create failed: ${res.status}`)
@@ -195,11 +210,15 @@ export function References() {
                 className="group relative bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-600 transition-all overflow-hidden"
               >
                 <div className="aspect-square bg-zinc-800 flex items-center justify-center overflow-hidden">
-                  <img
-                    src={ref.image_url}
-                    alt={ref.name}
-                    className="w-full h-full object-cover"
-                  />
+                  {ref.image_path ? (
+                    <img
+                      src={pathToFileUrl(ref.image_path)}
+                      alt={ref.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <ImageIcon className="h-12 w-12 text-zinc-600" />
+                  )}
                 </div>
 
                 <div className="p-2.5">
@@ -268,7 +287,7 @@ export function References() {
                 <label className="text-xs text-zinc-500 uppercase tracking-wider font-semibold mb-1.5 block">Image</label>
                 {formImage ? (
                   <div className="relative w-full aspect-video rounded-lg overflow-hidden border border-zinc-700 mb-2">
-                    <img src={formImage} alt="" className="w-full h-full object-cover" />
+                    <img src={pathToFileUrl(formImage)} alt="" className="w-full h-full object-cover" />
                     <button
                       onClick={() => setFormImage('')}
                       className="absolute top-2 right-2 bg-black/70 rounded p-1"

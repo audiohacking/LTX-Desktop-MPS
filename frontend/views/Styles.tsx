@@ -5,12 +5,19 @@ import { LtxLogo } from '../components/LtxLogo'
 import { Button } from '../components/ui/button'
 import { logger } from '../lib/logger'
 
+/** API uses reference_image_path (filesystem path); we convert to file:// for <img src>. */
 interface Style {
   id: string
   name: string
   description: string
-  reference_image?: string
+  reference_image_path: string
   created_at: string
+}
+
+function pathToFileUrl(filePath: string): string {
+  if (!filePath || typeof filePath !== 'string') return ''
+  const normalized = filePath.replace(/\\/g, '/')
+  return normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`
 }
 
 export function Styles() {
@@ -32,8 +39,16 @@ export function Styles() {
       const backendUrl = await window.electronAPI.getBackendUrl()
       const res = await fetch(`${backendUrl}/api/library/styles`)
       if (!res.ok) throw new Error(`Failed to fetch styles: ${res.status}`)
-      const data = (await res.json()) as { styles: Style[] }
-      setStyles(data.styles ?? [])
+      const data = (await res.json()) as { styles: unknown[] }
+      setStyles(
+        (data.styles ?? []).map((s: Record<string, unknown>) => ({
+          id: String(s.id ?? ''),
+          name: String(s.name ?? ''),
+          description: String(s.description ?? ''),
+          reference_image_path: String(s.reference_image_path ?? s.reference_image ?? ''),
+          created_at: String(s.created_at ?? ''),
+        }))
+      )
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to load styles'
       logger.error(msg)
@@ -59,7 +74,7 @@ export function Styles() {
     setEditingStyle(style)
     setFormName(style.name)
     setFormDescription(style.description)
-    setFormImage(style.reference_image ?? '')
+    setFormImage(style.reference_image_path ?? '')
     setIsModalOpen(true)
   }
 
@@ -71,7 +86,7 @@ export function Styles() {
       const body = {
         name: formName.trim(),
         description: formDescription.trim(),
-        reference_image: formImage || undefined,
+        reference_image_path: formImage || '',
       }
       if (editingStyle) {
         const res = await fetch(`${backendUrl}/api/library/styles/${editingStyle.id}`, {
@@ -178,9 +193,9 @@ export function Styles() {
                 className="group bg-zinc-900 rounded-lg border border-zinc-800 hover:border-zinc-600 transition-all overflow-hidden"
               >
                 <div className="aspect-video bg-zinc-800 flex items-center justify-center overflow-hidden">
-                  {style.reference_image ? (
+                  {style.reference_image_path ? (
                     <img
-                      src={style.reference_image}
+                      src={pathToFileUrl(style.reference_image_path)}
                       alt={style.name}
                       className="w-full h-full object-cover"
                     />
@@ -257,7 +272,7 @@ export function Styles() {
                 <label className="text-xs text-zinc-500 uppercase tracking-wider font-semibold mb-1.5 block">Reference Image</label>
                 {formImage ? (
                   <div className="relative w-full aspect-video rounded-lg overflow-hidden border border-zinc-700 mb-2">
-                    <img src={formImage} alt="" className="w-full h-full object-cover" />
+                    <img src={pathToFileUrl(formImage)} alt="" className="w-full h-full object-cover" />
                     <button
                       onClick={() => setFormImage('')}
                       className="absolute top-2 right-2 bg-black/70 rounded p-1"
