@@ -6,7 +6,6 @@ import { checkGPU } from '../gpu'
 import { isPythonReady, downloadPythonEmbed } from '../python-setup'
 import { getBackendHealthStatus, startPythonBackend } from '../python-backend'
 import { getMainWindow } from '../window'
-import { getAnalyticsState, setAnalyticsEnabled, sendAnalyticsEvent } from '../analytics'
 
 function getModelsPath(): string {
   const modelsPath = path.join(app.getPath('userData'), 'models')
@@ -146,18 +145,6 @@ export function registerAppHandlers(): void {
 
   ipcMain.handle('get-backend-health-status', () => {
     return getBackendHealthStatus()
-  })
-
-  ipcMain.handle('get-analytics-state', () => {
-    return getAnalyticsState()
-  })
-
-  ipcMain.handle('set-analytics-enabled', (_event, enabled: boolean) => {
-    setAnalyticsEnabled(enabled)
-  })
-
-  ipcMain.handle('send-analytics-event', async (_event, eventName: string, extraDetails?: Record<string, unknown> | null) => {
-    await sendAnalyticsEvent(eventName, extraDetails)
   })
 
 }

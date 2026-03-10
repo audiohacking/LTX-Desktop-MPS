@@ -43,7 +43,6 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
   const [modelLicenseText, setModelLicenseText] = useState<string | null>(null)
   const [modelLicenseLoading, setModelLicenseLoading] = useState(false)
   const [showModelLicense, setShowModelLicense] = useState(false)
-  const [analyticsEnabled, setAnalyticsEnabled] = useState(false)
 
   // Sync active tab with initialTab prop when modal opens
   useEffect(() => {
@@ -98,14 +97,6 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
     if (activeTab !== 'about' || appVersion) return
     window.electronAPI.getAppInfo().then(info => setAppVersion(info.version)).catch(() => {})
   }, [activeTab, appVersion])
-
-  // Fetch analytics state when modal opens
-  useEffect(() => {
-    if (!isOpen) return
-    window.electronAPI.getAnalyticsState()
-      .then((state: { analyticsEnabled: boolean }) => setAnalyticsEnabled(state.analyticsEnabled))
-      .catch(() => {})
-  }, [isOpen])
 
   // Fetch text encoder status when modal opens
   useEffect(() => {
@@ -236,13 +227,6 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
       onSettingsChange({ ...settings, promptEnhancerEnabledI2V: !settings.promptEnhancerEnabledI2V })
     }
   }
-  // Analytics handler
-  const handleToggleAnalytics = () => {
-    const next = !analyticsEnabled
-    setAnalyticsEnabled(next)
-    window.electronAPI.setAnalyticsEnabled(next).catch(() => {})
-  }
-
   // Seed handlers
   const handleToggleSeedLock = () => {
     onSettingsChange({
@@ -708,42 +692,6 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
                 </div>
               </div>
 
-              {/* Anonymous Analytics Setting */}
-              <div className="space-y-3 pt-4 border-t border-zinc-800">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <svg className="h-4 w-4 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="18" y1="20" x2="18" y2="10" />
-                        <line x1="12" y1="20" x2="12" y2="4" />
-                        <line x1="6" y1="20" x2="6" y2="14" />
-                      </svg>
-                      <label className="text-sm font-medium text-white">
-                        Anonymous Analytics
-                      </label>
-                    </div>
-                    <p className="text-xs text-zinc-500 leading-relaxed">
-                      Share anonymous usage data to help improve Director's Desktop.
-                      Only basic technical information is collected — never personal data or generated content.
-                    </p>
-                  </div>
-
-                  {/* Toggle Switch */}
-                  <button
-                    onClick={handleToggleAnalytics}
-                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                      analyticsEnabled ? 'bg-violet-500' : 'bg-zinc-700'
-                    }`}
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                        analyticsEnabled ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </div>
-
-              </div>
             </>
           )}
 
