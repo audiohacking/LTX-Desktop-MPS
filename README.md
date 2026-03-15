@@ -69,6 +69,8 @@ Model weights are downloaded into the `models/` subfolder (this can be large and
 
 On first launch you may be prompted to review/accept model license terms (license text is fetched from Hugging Face; requires internet).
 
+> ⚠️ DOWNLOADING MODELS WILL TAKE A LONG TIME AND THE PROGRESS UPDATE MIGHT NOT REFLECT PROGRESS! WATCH THE NETWORK RESOURCE MANAGER ⚠️
+
 Text encoding: to generate videos you must configure text encoding:
 
 - **LTX API key** (cloud text encoding) — **text encoding via the API is completely FREE** and highly recommended to speed up inference and save memory. Generate a free API key at the [LTX Console](https://console.ltx.video/). [Read more](https://ltx.io/model/model-blog/ltx-2-better-control-for-real-workflows).
