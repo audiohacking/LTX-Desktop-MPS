@@ -69,7 +69,7 @@ class QueueWorker:
             result_paths = executor.execute(job)
             self._queue.update_job(job.id, status="complete", progress=100, phase="complete", result_paths=result_paths)
         except Exception as exc:
-            logger.error("Job %s failed: %s", job.id, exc)
+            logger.exception("Job %s failed: %s", job.id, exc)
             self._queue.update_job(job.id, status="error", error=str(exc))
         finally:
             with self._lock:

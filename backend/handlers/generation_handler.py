@@ -193,25 +193,25 @@ class GenerationHandler(StateHandlerBase):
             case "gpu":
                 match self.state.gpu_slot:
                     case GpuSlot(generation=GenerationRunning(id=generation_id)) as gpu_slot:
-                        logger.error("Generation %s failed: %s", generation_id, error)
+                        logger.exception("Generation %s failed: %s", generation_id, error)
                         gpu_slot.generation = GenerationError(id=generation_id, error=error)
                     case _:
-                        logger.error("Generation failed without active running job: %s", error)
+                        logger.exception("Generation failed without active running job: %s", error)
                 return
             case "api":
                 match self.state.api_generation:
                     case GenerationRunning(id=generation_id):
-                        logger.error("Generation %s failed: %s", generation_id, error)
+                        logger.exception("Generation %s failed: %s", generation_id, error)
                         self.state.api_generation = GenerationError(id=generation_id, error=error)
                     case _:
-                        logger.error("Generation failed without active running job: %s", error)
+                        logger.exception("Generation failed without active running job: %s", error)
                 return
             case _:
                 if isinstance(self._gpu_generation(), GenerationCancelled) or isinstance(
                     self.state.api_generation, GenerationCancelled
                 ):
                     return
-                logger.error("Generation failed without active running job: %s", error)
+                logger.exception("Generation failed without active running job: %s", error)
                 return
 
     @with_state_lock

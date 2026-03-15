@@ -48,6 +48,13 @@ logger = logging.getLogger(__name__)
 use_sage_attention = os.environ.get("USE_SAGE_ATTENTION", "1") == "1"
 _sageattention_runtime_fallback_logged = False
 
+# Check for MPS device - SageAttention doesn't support MPS
+_is_mps_device = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+
+if use_sage_attention and _is_mps_device:
+    logger.info("SageAttention disabled - MPS device detected (not supported by SageAttention)")
+    use_sage_attention = False
+
 if use_sage_attention:
     try:
         from sageattention import sageattn  # type: ignore[reportMissingImports]
@@ -107,6 +114,8 @@ def _get_device() -> torch.device:
         return torch.device("cuda")
     if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
         return torch.device("mps")
+    # Fallback to CPU if no GPU available
+    logger.warning("No CUDA or MPS device available, using CPU")
     return torch.device("cpu")
 
 
