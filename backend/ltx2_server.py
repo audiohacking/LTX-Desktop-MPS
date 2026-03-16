@@ -48,43 +48,45 @@ logger = logging.getLogger(__name__)
 
 def _setup_cuda_fallback() -> None:
     """
-    Monkey-patch torch.cuda functions to handle cases where PyTorch is not
-    compiled with CUDA support (e.g., running on MPS or CPU).
-    
+    Monkey-patch torch.cuda functions to handle cases where the active device
+    is not CUDA (e.g., MPS or CPU).  This is triggered at runtime based on the
+    selected device, so it also applies to CUDA-built PyTorch installations
+    when no CUDA GPU is in use.
+
     The ltx-pipelines library calls torch.cuda.synchronize() unconditionally,
     which fails with "Torch not compiled with CUDA enabled" on non-CUDA builds.
     """
     # Check if we're on a device that doesn't have full CUDA support
     device_type = DEVICE.type
-    
+
     if device_type == "cuda":
         # True CUDA - no fallback needed
         return
-    
+
     logger.info(f"Setup CUDA fallback for device type: {device_type}")
-    
+
     # Create safe no-op implementations for CUDA functions
-    def safe_cuda_synchronize() -> None:
-        """No-op synchronize for non-CUDA devices."""
+    def safe_cuda_synchronize(device: object = None) -> None:
+        """No-op synchronize for non-CUDA devices; delegates to MPS when available."""
         if device_type == "mps":
             try:
                 torch.mps.synchronize()
-            except Exception:
-                pass
-    
+            except (RuntimeError, AttributeError) as exc:
+                logger.debug("MPS synchronize fallback failed: %s", exc)
+
     def safe_cuda_empty_cache() -> None:
-        """No-op empty_cache for non-CUDA devices."""
+        """No-op empty_cache for non-CUDA devices; delegates to MPS when available."""
         if device_type == "mps":
             try:
                 torch.mps.empty_cache()
-            except Exception:
-                pass
-    
-    def safe_cuda_memory_reserved() -> int:
+            except (RuntimeError, AttributeError) as exc:
+                logger.debug("MPS empty_cache fallback failed: %s", exc)
+
+    def safe_cuda_memory_reserved(device: object = None) -> int:
         """Return 0 for memory reserved on non-CUDA devices."""
         return 0
-    
-    def safe_cuda_memory_allocated() -> int:
+
+    def safe_cuda_memory_allocated(device: object = None) -> int:
         """Return 0 for memory allocated on non-CUDA devices."""
         return 0
     
