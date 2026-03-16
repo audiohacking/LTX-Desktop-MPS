@@ -48,22 +48,23 @@ logger = logging.getLogger(__name__)
 
 def _setup_cuda_fallback() -> None:
     """
-    Monkey-patch torch.cuda functions to handle cases where the active device
-    is not CUDA (e.g., MPS or CPU).  This is triggered at runtime based on the
-    selected device, so it also applies to CUDA-built PyTorch installations
-    when no CUDA GPU is in use.
+    Monkey-patch torch.cuda functions when PyTorch was not compiled with CUDA
+    support (i.e., torch.version.cuda is None, as on MPS-only or CPU-only
+    wheels).
 
     The ltx-pipelines library calls torch.cuda.synchronize() unconditionally,
-    which fails with "Torch not compiled with CUDA enabled" on non-CUDA builds.
+    which raises "Torch not compiled with CUDA enabled" on non-CUDA builds.
+    This patch is intentionally limited to non-CUDA builds so that CUDA-capable
+    installations that happen to be running on CPU (e.g., driver temporarily
+    unavailable) still surface real CUDA misconfiguration errors instead of
+    silently no-oping them.
     """
-    # Check if we're on a device that doesn't have full CUDA support
-    device_type = DEVICE.type
-
-    if device_type == "cuda":
-        # True CUDA - no fallback needed
+    # Only patch when PyTorch has no CUDA support compiled in.
+    if torch.version.cuda is not None:
         return
 
-    logger.info(f"Setup CUDA fallback for device type: {device_type}")
+    device_type = DEVICE.type
+    logger.info(f"Setup CUDA fallback for non-CUDA PyTorch build (device: {device_type})")
 
     # Create safe no-op implementations for CUDA functions
     def safe_cuda_synchronize(device: object = None) -> None:
