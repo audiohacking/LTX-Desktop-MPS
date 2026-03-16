@@ -58,6 +58,8 @@ In API-only mode, available resolutions/durations may be limited to what the API
 2. Install and launch **LTX Desktop**
 3. Complete first-run setup
 
+> **macOS users:** The DMG is ad-hoc signed (no Apple Developer account). On first launch macOS Gatekeeper will show "cannot be opened because the developer cannot be verified." Go to **System Settings → Privacy & Security** and click **Open Anyway** — no shell commands required. See [INSTALLER.md](docs/INSTALLER.md) for step-by-step instructions.
+
 ## First run & data locations
 
 LTX Desktop stores app data (settings, models, logs) in:

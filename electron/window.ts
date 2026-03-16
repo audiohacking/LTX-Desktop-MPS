@@ -12,9 +12,13 @@ export function createWindow(): BrowserWindow {
     ? path.join(getCurrentDir(), 'dist-electron', 'preload.js')
     : path.join(app.getAppPath(), 'dist-electron', 'preload.js')
 
-  // App icon — use .ico on Windows, .png elsewhere
+  // App icon — use .ico on Windows, .png elsewhere.
+  // In production the icon is placed in the app's resources directory via
+  // extraResources; in dev it lives in the project's resources/ folder.
   const iconExt = process.platform === 'win32' ? 'icon.ico' : 'icon.png'
-  const iconPath = path.join(getCurrentDir(), 'resources', iconExt)
+  const iconPath = isDev
+    ? path.join(getCurrentDir(), 'resources', iconExt)
+    : path.join(process.resourcesPath, iconExt)
   logger.info(`[icon] Loading app icon from: ${iconPath} | exists: ${fs.existsSync(iconPath)}`)
   const appIcon = fs.existsSync(iconPath) ? nativeImage.createFromPath(iconPath) : undefined
 

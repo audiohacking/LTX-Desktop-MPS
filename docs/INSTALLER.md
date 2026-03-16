@@ -128,11 +128,16 @@ Ensure you have internet access. The script downloads Python automatically.
 ### Build fails with CUDA errors
 The build doesn't require a GPU. CUDA packages are pre-built binaries.
 
-### macOS: "App is damaged" or Gatekeeper warning
-On unsigned builds, macOS Gatekeeper may block the app. Right-click the app and select "Open", or run:
-```bash
-xattr -dr com.apple.quarantine /Applications/LTX\ Desktop.app
-```
+### macOS: Gatekeeper "unidentified developer" warning
+The distributed DMG is ad-hoc signed (no Apple Developer account), so Gatekeeper will
+block the first launch. No shell commands are required:
+
+1. Open the DMG and drag **LTX Desktop** to `/Applications`.
+2. Double-click the app — macOS will show "cannot be opened because the developer cannot be verified."  Click **Cancel** (or **OK**) to dismiss.
+3. Open **System Settings → Privacy & Security**. Scroll down to find the blocked app and click **Open Anyway**.
+4. Confirm by clicking **Open** in the follow-up dialog.
+
+The app will launch normally from this point on.
 
 ### Installer is too large
 Expected sizes:

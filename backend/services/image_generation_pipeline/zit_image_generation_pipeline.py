@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 import torch
-from diffusers.pipelines.auto_pipeline import ZImagePipeline  # type: ignore[reportUnknownVariableType]
 from PIL.Image import Image as PILImage
 
 from services.services_utils import ImagePipelineOutputLike, PILImageType, get_device_type
@@ -30,6 +29,7 @@ class ZitImageGenerationPipeline:
         return ZitImageGenerationPipeline(model_path=model_path, device=device)
 
     def __init__(self, model_path: str, device: str | None = None) -> None:
+        from diffusers.pipelines.auto_pipeline import ZImagePipeline  # type: ignore[reportUnknownVariableType]
         self._device: str | None = None
         self._cpu_offload_active = False
         self.pipeline = ZImagePipeline.from_pretrained(  # type: ignore[reportUnknownMemberType]

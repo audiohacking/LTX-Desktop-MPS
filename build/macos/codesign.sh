@@ -42,20 +42,27 @@ if [ ! -f "$ENTITLEMENTS_PATH" ]; then
 fi
 
 # ── Signing helper ────────────────────────────────────────────────────────────
-# Ad-hoc signing ("-") does not support --timestamp (requires a CA).
+# Ad-hoc signing ("-") does not support --timestamp (requires a CA) and must
+# NOT use --options runtime. Hardened Runtime ("runtime" option) enables library
+# validation, which prevents Python from loading unsigned pip-installed .so
+# extensions. Without hardened runtime the signed bundle works correctly after
+# the user clicks "Open Anyway" in Privacy & Security — no shell commands needed.
 sign_target() {
     local target="$1"
     echo "  Signing: $(basename "$target")"
 
     if [ "$SIGNING_IDENTITY" = "-" ]; then
+        # Ad-hoc: no hardened runtime so macOS does not enforce library validation.
         xcrun codesign \
             --sign "$SIGNING_IDENTITY" \
             --force \
-            --options runtime \
             --entitlements "$ENTITLEMENTS_PATH" \
             --deep \
             "$target"
     else
+        # Real Developer ID certificate: hardened runtime + timestamp required for
+        # notarization. The disable-library-validation entitlement in the plist
+        # allows Python to load unsigned pip extensions even under hardened runtime.
         xcrun codesign \
             --sign "$SIGNING_IDENTITY" \
             --force \
