@@ -43,6 +43,81 @@ logging.basicConfig(level=logging.INFO, handlers=[console_handler])
 logger = logging.getLogger(__name__)
 
 # ============================================================
+# CUDA Fallback Handling (for non-CUDA PyTorch builds on MPS/CPU)
+# ============================================================
+
+def _setup_cuda_fallback() -> None:
+    """
+    Monkey-patch torch.cuda functions to handle cases where PyTorch is not
+    compiled with CUDA support (e.g., running on MPS or CPU).
+    
+    The ltx-pipelines library calls torch.cuda.synchronize() unconditionally,
+    which fails with "Torch not compiled with CUDA enabled" on non-CUDA builds.
+    """
+    # Check if we're on a device that doesn't have full CUDA support
+    device_type = DEVICE.type
+    
+    if device_type == "cuda":
+        # True CUDA - no fallback needed
+        return
+    
+    logger.info(f"Setup CUDA fallback for device type: {device_type}")
+    
+    # Create safe no-op implementations for CUDA functions
+    def safe_cuda_synchronize() -> None:
+        """No-op synchronize for non-CUDA devices."""
+        if device_type == "mps":
+            try:
+                torch.mps.synchronize()
+            except Exception:
+                pass
+    
+    def safe_cuda_empty_cache() -> None:
+        """No-op empty_cache for non-CUDA devices."""
+        if device_type == "mps":
+            try:
+                torch.mps.empty_cache()
+            except Exception:
+                pass
+    
+    def safe_cuda_memory_reserved() -> int:
+        """Return 0 for memory reserved on non-CUDA devices."""
+        return 0
+    
+    def safe_cuda_memory_allocated() -> int:
+        """Return 0 for memory allocated on non-CUDA devices."""
+        return 0
+    
+    def safe_cuda_get_device_name(device: object = None) -> str:
+        """Return device name for non-CUDA devices."""
+        if device_type == "mps" and hasattr(torch, 'mps'):
+            return "Apple Silicon MPS"
+        return "CPU"
+    
+    def safe_cuda_get_device_capability(device: object = None) -> tuple[int, int]:
+        """Return (0, 0) for non-CUDA devices."""
+        return (0, 0)
+    
+    # Patch torch.cuda module
+    if not hasattr(torch.cuda, "_ltx_original_synchronize"):
+        # Store original functions if they exist
+        try:
+            torch.cuda._ltx_original_synchronize = torch.cuda.synchronize  # type: ignore[attr-defined]
+        except AttributeError:
+            pass
+    
+    # Replace with safe implementations
+    torch.cuda.synchronize = safe_cuda_synchronize  # type: ignore[assignment]
+    torch.cuda.empty_cache = safe_cuda_empty_cache  # type: ignore[assignment]
+    torch.cuda.memory_reserved = safe_cuda_memory_reserved  # type: ignore[assignment]
+    torch.cuda.memory_allocated = safe_cuda_memory_allocated  # type: ignore[assignment]
+    torch.cuda.get_device_name = safe_cuda_get_device_name  # type: ignore[assignment]
+    torch.cuda.get_device_capability = safe_cuda_get_device_capability  # type: ignore[assignment]
+    
+    logger.info("CUDA fallback patch applied successfully")
+
+
+# ============================================================
 # SageAttention Integration
 # ============================================================
 use_sage_attention = os.environ.get("USE_SAGE_ATTENTION", "1") == "1"
@@ -121,6 +196,9 @@ def _get_device() -> torch.device:
 
 DEVICE = _get_device()
 DTYPE = torch.bfloat16
+
+# Setup CUDA fallback for non-CUDA PyTorch builds (MPS/CPU support)
+_setup_cuda_fallback()
 
 def _resolve_app_data_dir() -> Path:
     env_path = os.environ.get("LTX_APP_DATA_DIR")
