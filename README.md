@@ -37,6 +37,10 @@ LTX Desktop is an open-source desktop app for generating videos with LTX models 
 
 In API-only mode, available resolutions/durations may be limited to what the API supports.
 
+### GGUF mode (experimental)
+
+GGUF mode uses quantized LTX models (e.g. from [Unsloth LTX-2.3-GGUF](https://huggingface.co/unsloth/LTX-2.3-GGUF)) for lower VRAM and better compatibility on Apple Silicon. The layout matches the reference ComfyUI workflow: **text encoders** are a `text_encoders/` folder containing the quantized Gemma GGUF and `ltx-2.3-22b-dev_embeddings_connectors.safetensors` (no full ~25 GB Gemma). Enable via `LTX_USE_GGUF=1` or the in-app setting when available. For details and developer notes see [DEV.md](DEV.md) and [backend/docs/GGUF_MEMORY.md](backend/docs/GGUF_MEMORY.md).
+
 ## System requirements
 
 ### Windows (local generation)
@@ -107,7 +111,7 @@ Used for AI prompt suggestions. When enabled, prompt context and frames may be s
 LTX Desktop is split into three main layers:
 
 - **Renderer (`frontend/`)**: TypeScript + React UI.
-  - Calls the local backend over HTTP at `http://localhost:8000`.
+  - Calls the local backend over HTTP at `http://localhost:8010` (default port chosen to avoid ComfyUI).
   - Talks to Electron via the preload bridge (`window.electronAPI`).
 - **Electron (`electron/`)**: TypeScript main process + preload.
   - Owns app lifecycle and OS integration (file dialogs, native export via ffmpeg, starting/managing the Python backend).
@@ -118,7 +122,7 @@ LTX Desktop is split into three main layers:
 
 ```mermaid
 graph TD
-  UI["Renderer (React + TS)"] -->|HTTP: localhost:8000| BE["Backend (FastAPI + Python)"]
+  UI["Renderer (React + TS)"] -->|HTTP: localhost:8010| BE["Backend (FastAPI + Python)"]
   UI -->|IPC via preload: window.electronAPI| EL["Electron main (TS)"]
   EL --> OS["OS integration (files, dialogs, ffmpeg, process mgmt)"]
   BE --> GPU["Local models + GPU (when supported)"]
@@ -181,9 +185,11 @@ LTX Desktop collects minimal, anonymous usage analytics (app version, platform, 
 
 ## Docs
 
+- [`DEV.md`](DEV.md) — development notes (GGUF mode, backend layout, testing)
 - [`INSTALLER.md`](docs/INSTALLER.md) — building installers
 - [`TELEMETRY.md`](docs/TELEMETRY.md) — telemetry and privacy
 - [`backend/architecture.md`](backend/architecture.md) — backend architecture
+- [`backend/docs/GGUF_MEMORY.md`](backend/docs/GGUF_MEMORY.md) — GGUF memory behaviour and text encoder
 
 ## Contributing
 

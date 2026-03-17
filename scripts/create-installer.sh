@@ -86,7 +86,8 @@ if [ "$UNPACK" = true ]; then
   echo "Packaging unpacked app (fast mode)..."
   pnpm exec electron-builder $BUILDER_ARGS --dir
 else
-  PUBLISH_ARGS=""
+  # Default to never so local builds don't require GH_TOKEN (electron-builder would otherwise try to publish when it detects CI).
+  PUBLISH_ARGS="--publish never"
   if [ -n "$PUBLISH" ]; then
     PUBLISH_ARGS="--publish $PUBLISH"
   fi

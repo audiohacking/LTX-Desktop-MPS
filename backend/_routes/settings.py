@@ -29,6 +29,9 @@ def route_post_settings(
     _, _after, changed_paths = handler.settings.update_settings(req)
     changed_roots = {path.split(".", 1)[0] for path in changed_paths}
 
+    if "comfyui_models_path" in changed_paths:
+        handler.sync_comfyui_base_from_state()
+
     logger.info(
         "Applied settings patch (changed=%s)",
         ", ".join(sorted(changed_roots)) if changed_roots else "none",

@@ -216,20 +216,28 @@ export async function startPythonBackend(): Promise<void> {
       pythonArgs = isDev ? ['-Xfrozen_modules=off', '-u', mainPy] : ['-u', mainPy]
     }
 
+    const backendEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      PYTHONUNBUFFERED: '1',
+      PYTHONNOUSERSITE: '1',
+      LTX_PORT: String(PYTHON_PORT),
+      LTX_APP_DATA_DIR: getAppDataDir(),
+      PYTORCH_ENABLE_MPS_FALLBACK: '1',
+      // Cap MPS allocations at 90% of recommended working set to avoid system-wide OOM/crashes (0.0 = no limit, can freeze machine)
+      ...(process.platform === 'darwin' ? { PYTORCH_MPS_HIGH_WATERMARK_RATIO: '0.9' } : {}),
+      // Set PYTHONHOME for bundled Python on macOS so it finds its stdlib
+      ...(!isDev && process.platform !== 'win32' ? {
+        PYTHONHOME: getPythonDir(),
+      } : {}),
+    }
+    // Forward GGUF/ComfyUI env so "LTX_USE_GGUF=1 open LTX Desktop.app" works
+    if (process.env.LTX_USE_GGUF != null) backendEnv.LTX_USE_GGUF = process.env.LTX_USE_GGUF
+    if (process.env.LTX_GGUF_QUANTIZATION != null) backendEnv.LTX_GGUF_QUANTIZATION = process.env.LTX_GGUF_QUANTIZATION
+    if (process.env.LTX_COMFYUI_MODELS_PATH != null) backendEnv.LTX_COMFYUI_MODELS_PATH = process.env.LTX_COMFYUI_MODELS_PATH
+
     pythonProcess = spawn(pythonPath, pythonArgs, {
       cwd: backendPath,
-      env: {
-        ...process.env,
-        PYTHONUNBUFFERED: '1',
-        PYTHONNOUSERSITE: '1',
-        LTX_PORT: String(PYTHON_PORT),
-        LTX_APP_DATA_DIR: getAppDataDir(),
-        PYTORCH_ENABLE_MPS_FALLBACK: '1',
-        // Set PYTHONHOME for bundled Python on macOS so it finds its stdlib
-        ...(!isDev && process.platform !== 'win32' ? {
-          PYTHONHOME: getPythonDir(),
-        } : {}),
-      },
+      env: backendEnv,
       stdio: ['ignore', 'pipe', 'pipe']
     })
 

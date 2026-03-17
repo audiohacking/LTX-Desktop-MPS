@@ -21,6 +21,24 @@ from state.app_state_types import AppState
 logger = logging.getLogger(__name__)
 
 
+def load_settings_from_file(settings_file: Path, default_settings: AppSettings) -> AppSettings:
+    """Load and validate settings from disk for bootstrap (e.g. before building RuntimeConfig)."""
+    if not settings_file.exists():
+        return default_settings.model_copy(deep=True)
+    try:
+        with open(settings_file, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        migrated = migrate_legacy_settings(ensure_json_object(payload))
+        merged = deep_merge_dicts(
+            ensure_json_object(default_settings.model_dump(by_alias=False)),
+            migrated,
+        )
+        return AppSettings.model_validate(merged)
+    except Exception as exc:
+        logger.warning("Could not load settings from %s: %s", settings_file, exc, exc_info=True)
+        return default_settings.model_copy(deep=True)
+
+
 class SettingsHandler(StateHandlerBase):
     def __init__(self, state: AppState, lock: RLock, settings_file: Path) -> None:
         super().__init__(state, lock)

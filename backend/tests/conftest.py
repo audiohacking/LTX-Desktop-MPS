@@ -61,6 +61,9 @@ def test_state(tmp_path: Path, fake_services: FakeServices):
         ltx_api_base_url="https://api.ltx.video",
         force_api_generations=False,
         use_sage_attention=False,
+        use_gguf=False,
+        gguf_quantization="Q4_K_M",
+        comfyui_models_base=None,
         camera_motion_prompts=CAMERA_MOTION_PROMPTS,
         default_negative_prompt=DEFAULT_NEGATIVE_PROMPT,
     )

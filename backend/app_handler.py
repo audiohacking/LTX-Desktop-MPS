@@ -23,6 +23,7 @@ from handlers import (
 )
 from handlers.gallery_handler import GalleryHandler
 from handlers.library_handler import LibraryHandler
+from handlers.models_handler import resolve_comfyui_base_from_settings
 from runtime_config.runtime_config import RuntimeConfig
 from handlers.contact_sheet_handler import ContactSheetHandler
 from handlers.enhance_prompt_handler import EnhancePromptHandler
@@ -282,6 +283,12 @@ class AppHandler:
         self.style_guide = StyleGuideHandler(job_queue=self.job_queue)
 
         self.models.refresh_available_files()
+
+    def sync_comfyui_base_from_state(self) -> None:
+        """Update config's ComfyUI base from current settings so pipelines and model lookup use the latest path."""
+        self.config.comfyui_models_base = resolve_comfyui_base_from_settings(
+            self.state.app_settings.comfyui_models_path or ""
+        )
 
     def determine_slot(self, model: str) -> str:
         """Determine whether a job should use the gpu or api slot."""

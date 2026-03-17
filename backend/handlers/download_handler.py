@@ -127,7 +127,7 @@ class DownloadHandler(StateHandlerBase):
                         case FileDownloadRunning() as running:
                             current_file = file_type
                             current_file_progress = int(running.progress * 100)
-                            speed_mbps = int(running.speed_mbps)
+                            speed_mbps = float(running.speed_mbps)
                             downloaded_bytes += running.downloaded_bytes
             case _:
                 status = "idle"
@@ -154,12 +154,14 @@ class DownloadHandler(StateHandlerBase):
         if spec.is_folder:
             src = self._config.downloading_dir / spec.relative_path
             dst = self._config.model_path(file_type)
+            dst.parent.mkdir(parents=True, exist_ok=True)
             if dst.exists():
                 shutil.rmtree(dst)
             src.rename(dst)
         else:
             src = self._config.downloading_dir / spec.relative_path
             dst = self._config.model_path(file_type)
+            dst.parent.mkdir(parents=True, exist_ok=True)
             if dst.exists():
                 dst.unlink()
             src.rename(dst)
@@ -219,6 +221,7 @@ class DownloadHandler(StateHandlerBase):
                         filename=spec.name,
                         local_dir=str(self._config.downloading_path(file_type)),
                         on_progress=progress_cb,
+                        expected_size_bytes=expected_size,
                     )
 
                 self._move_to_final(file_type)

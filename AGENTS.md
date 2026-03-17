@@ -8,7 +8,7 @@ LTX Desktop is an Electron app for AI video generation using LTX models. Three-l
 
 - **Frontend** (`frontend/`): React 18 + TypeScript + Tailwind CSS renderer
 - **Electron** (`electron/`): Main process managing app lifecycle, IPC, Python backend process, ffmpeg export
-- **Backend** (`backend/`): Python FastAPI server (port 8000) handling ML model orchestration and generation
+- **Backend** (`backend/`): Python FastAPI server (default port 8010) handling ML model orchestration and generation
 
 ## Common Commands
 
@@ -36,7 +36,7 @@ PRs must pass: `pnpm typecheck` + `pnpm backend:test` + frontend Vite build.
 - **State management**: React contexts only (`ProjectContext`, `AppSettingsContext`, `KeyboardShortcutsContext`) — no Redux/Zustand
 - **Routing**: View-based via `ProjectContext` with views: `home`, `project`, `playground`
 - **IPC bridge**: All Electron communication through `window.electronAPI` (defined in `electron/preload.ts`)
-- **Backend calls**: Frontend calls `http://localhost:8000` directly
+- **Backend calls**: Frontend calls the backend at `http://localhost:8010` (configurable port) directly
 - **Styling**: Tailwind with custom semantic color tokens via CSS variables; utilities from `class-variance-authority` + `clsx` + `tailwind-merge`
 - **No frontend tests** currently exist
 
@@ -80,6 +80,14 @@ Key patterns:
 - Python 3.13+ (per `.python-version`), managed with `uv`
 - Pyright strict mode (`backend/pyrightconfig.json`)
 - Dependencies in `backend/pyproject.toml`
+
+## GGUF (experimental)
+
+- **Settings**: Use GGUF models, quantization (Q2_K–Q8_0), and optional ComfyUI models path are in app settings (Settings → Inference). Restart required for changes.
+- **ENV overrides**: `LTX_USE_GGUF=1`, `LTX_GGUF_QUANTIZATION`, `LTX_COMFYUI_MODELS_PATH` can override at startup.
+- **ComfyUI path**: On macOS, empty ComfyUI path defaults to `~/Documents/ComfyUI/models` when present. When set, checkpoint/upsampler/text_encoder resolve under that base (unet/, latent_upscale_models/, text_encoders/). ZIT stays under app models dir.
+- **Behavior**: GGUF mode uses Unsloth LTX-2.3-GGUF; in-app inference is not implemented (stub raises on generate). Use ComfyUI-GGUF with the downloaded or shared models.
+- **Plan**: `backend/docs/GGUF_INTEGRATION_PLAN.md`
 
 ## Key File Locations
 

@@ -7,6 +7,7 @@ import json
 from state.app_settings import AppSettings, UpdateSettingsRequest
 from state import build_initial_state
 from app_handler import ServiceBundle
+from handlers.settings_handler import load_settings_from_file
 from tests.fakes.services import FakeServices
 
 
@@ -31,6 +32,9 @@ class TestGetSettings:
         assert data["hasGeminiApiKey"] is False
         assert data["seedLocked"] is False
         assert data["lockedSeed"] == 42
+        assert data["useGguf"] is False
+        assert data["ggufQuantization"] == "Q4_K_M"
+        assert data["comfyuiModelsPath"] == ""
         assert "ltxApiKey" not in data
         assert "replicateApiKey" not in data
         assert "geminiApiKey" not in data
@@ -151,6 +155,27 @@ class TestVideoModel:
         assert get_resp.json()["videoModel"] == "seedance-1.5-pro"
 
 
+class TestGgufAndComfyuiSettings:
+    def test_gguf_and_comfyui_roundtrip(self, client, test_state):
+        r = client.post(
+            "/api/settings",
+            json={
+                "useGguf": True,
+                "ggufQuantization": "Q5_K_M",
+                "comfyuiModelsPath": "/path/to/ComfyUI/models",
+            },
+        )
+        assert r.status_code == 200
+        assert test_state.state.app_settings.use_gguf is True
+        assert test_state.state.app_settings.gguf_quantization == "Q5_K_M"
+        assert test_state.state.app_settings.comfyui_models_path == "/path/to/ComfyUI/models"
+        get_resp = client.get("/api/settings")
+        data = get_resp.json()
+        assert data["useGguf"] is True
+        assert data["ggufQuantization"] == "Q5_K_M"
+        assert data["comfyuiModelsPath"] == "/path/to/ComfyUI/models"
+
+
 class TestSettingsPersistence:
     def _new_state(self, test_state, default_app_settings):
         fake_services = FakeServices()
@@ -191,6 +216,22 @@ class TestSettingsPersistence:
         assert loaded.state.app_settings.prompt_cache_size == 1000
         assert loaded.state.app_settings.locked_seed == 0
         assert loaded.state.app_settings.pro_model.steps == 100
+
+    def test_load_settings_from_file_returns_gguf_and_comfyui(self, test_state, default_app_settings):
+        test_state.config.settings_file.write_text(
+            json.dumps(
+                {
+                    "use_gguf": True,
+                    "gguf_quantization": "Q5_K_M",
+                    "comfyui_models_path": "/custom/ComfyUI/models",
+                }
+            ),
+            encoding="utf-8",
+        )
+        loaded = load_settings_from_file(test_state.config.settings_file, default_app_settings)
+        assert loaded.use_gguf is True
+        assert loaded.gguf_quantization == "Q5_K_M"
+        assert loaded.comfyui_models_path == "/custom/ComfyUI/models"
 
     def test_legacy_prompt_enhancer_key_migrates(self, test_state, default_app_settings):
         test_state.config.settings_file.write_text(

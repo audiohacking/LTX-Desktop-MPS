@@ -27,6 +27,9 @@ export interface AppSettings {
   promptEnhancerEnabledI2V: boolean
   seedLocked: boolean
   lockedSeed: number
+  useGguf: boolean
+  ggufQuantization: string
+  comfyuiModelsPath: string
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -47,6 +50,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   promptEnhancerEnabledI2V: false,
   seedLocked: false,
   lockedSeed: 42,
+  useGguf: false,
+  ggufQuantization: 'Q4_K_M',
+  comfyuiModelsPath: '',
 }
 
 type BackendProcessStatus = 'alive' | 'restarting' | 'dead'
@@ -98,6 +104,9 @@ function normalizeAppSettings(data: Partial<AppSettings>): AppSettings {
     promptEnhancerEnabledI2V: data.promptEnhancerEnabledI2V ?? DEFAULT_APP_SETTINGS.promptEnhancerEnabledI2V,
     seedLocked: data.seedLocked ?? DEFAULT_APP_SETTINGS.seedLocked,
     lockedSeed: data.lockedSeed ?? DEFAULT_APP_SETTINGS.lockedSeed,
+    useGguf: data.useGguf ?? DEFAULT_APP_SETTINGS.useGguf,
+    ggufQuantization: data.ggufQuantization ?? DEFAULT_APP_SETTINGS.ggufQuantization,
+    comfyuiModelsPath: data.comfyuiModelsPath ?? DEFAULT_APP_SETTINGS.comfyuiModelsPath,
   }
 }
 

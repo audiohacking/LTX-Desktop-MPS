@@ -2,7 +2,8 @@ import { app } from 'electron'
 import path from 'path'
 import os from 'os'
 
-export const PYTHON_PORT = 8000
+// Use 8010 to avoid colliding with ComfyUI (often 8000 or 8188)
+export const PYTHON_PORT = 8010
 export const BACKEND_BASE_URL = `http://localhost:${PYTHON_PORT}`
 export const isDev = !app.isPackaged
 

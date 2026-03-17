@@ -22,7 +22,7 @@ Director's Desktop (Electron)
   - Credits display           - Job Queue
   - Push results back         - Settings
 
-  FastAPI Backend (localhost:8000)
+  FastAPI Backend (localhost:8010)
   + /api/sync/* routes for Palette connection
 ```
 

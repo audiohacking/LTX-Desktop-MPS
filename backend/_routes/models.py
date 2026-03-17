@@ -7,6 +7,8 @@ import logging
 from fastapi import APIRouter, Depends
 
 from api_types import (
+    CheckPathRequest,
+    CheckPathResponse,
     DownloadProgressResponse,
     ModelDownloadRequest,
     ModelDownloadStartResponse,
@@ -31,6 +33,15 @@ def route_models_list(handler: AppHandler = Depends(get_state_service)) -> list[
 @router.get("/models/status", response_model=ModelsStatusResponse)
 def route_models_status(handler: AppHandler = Depends(get_state_service)) -> ModelsStatusResponse:
     return handler.models.get_models_status()
+
+
+@router.post("/models/check-path", response_model=CheckPathResponse)
+def route_models_check_path(
+    req: CheckPathRequest,
+    handler: AppHandler = Depends(get_state_service),
+) -> CheckPathResponse:
+    """Scan for required models under the given path. Used by first-run 'I already have models' flow."""
+    return handler.models.check_models_at_path(req.comfyuiModelsPath)
 
 
 @router.get("/models/download/progress", response_model=DownloadProgressResponse)

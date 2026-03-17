@@ -57,6 +57,8 @@ export function LaunchGate({
   const [licenseError, setLicenseError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [isActionPending, setIsActionPending] = useState(false)
+  const [haveModelsChecking, setHaveModelsChecking] = useState(false)
+  const [haveModelsMessage, setHaveModelsMessage] = useState<string | null>(null)
 
   // Format bytes to human readable
   const formatBytes = (bytes: number): string => {
@@ -173,7 +175,7 @@ export function LaunchGate({
     }
 
     pollProgress()
-    const interval = setInterval(pollProgress, 500)
+    const interval = setInterval(pollProgress, 300)
     return () => clearInterval(interval)
   }, [currentStep, backendUrl])
 
@@ -574,6 +576,62 @@ export function LaunchGate({
                     'The API provides faster text encoding (~1s vs 23s local).'
                   )}
                 </p>
+              </div>
+
+              {/* I already have models */}
+              <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid #333' }}>
+                <p style={{ fontSize: 13, color: '#a0a0a0', marginBottom: 10 }}>
+                  Already have LTX or ComfyUI models on this machine?
+                </p>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!backendUrl || haveModelsChecking) return
+                    setHaveModelsMessage(null)
+                    const dir = await window.electronAPI?.showOpenDirectoryDialog({ title: 'Select folder containing models (e.g. ComfyUI models)' })
+                    if (!dir) return
+                    setHaveModelsChecking(true)
+                    try {
+                      await fetch(`${backendUrl}/api/settings`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ comfyuiModelsPath: dir }),
+                      })
+                      const res = await fetch(`${backendUrl}/api/models/check-path`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ comfyuiModelsPath: dir }),
+                      })
+                      if (!res.ok) throw new Error('Could not scan folder.')
+                      const data = await res.json() as { all_downloaded?: boolean }
+                      if (data.all_downloaded === true) {
+                        await onComplete()
+                        return
+                      }
+                      setHaveModelsMessage('No models found in that folder. Restart the app after choosing the correct folder.')
+                    } catch (e) {
+                      setHaveModelsMessage(e instanceof Error ? e.message : 'Could not scan folder.')
+                    } finally {
+                      setHaveModelsChecking(false)
+                    }
+                  }}
+                  disabled={haveModelsChecking}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: 8,
+                    fontSize: 13,
+                    fontWeight: 500,
+                    cursor: haveModelsChecking ? 'default' : 'pointer',
+                    background: 'transparent',
+                    border: '1px solid #555',
+                    color: '#A98BD9',
+                  }}
+                >
+                  {haveModelsChecking ? 'Scanning...' : 'I already have models'}
+                </button>
+                {haveModelsMessage && (
+                  <p style={{ fontSize: 12, color: '#a0a0a0', marginTop: 10 }}>{haveModelsMessage}</p>
+                )}
               </div>
             </div>
           )}

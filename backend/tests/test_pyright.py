@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -34,8 +35,13 @@ def _format_diagnostics(payload: dict[str, Any], limit: int = 15) -> str:
 
 def test_pyright_has_no_errors_or_warnings() -> None:
     backend_root = Path(__file__).resolve().parents[1]
+    # Use pyright from the backend venv (sys.executable can resolve to uv's Python)
+    bin_dir = "Scripts" if sys.platform == "win32" else "bin"
+    pyright_name = "pyright.cmd" if sys.platform == "win32" else "pyright"
+    venv_pyright = backend_root / ".venv" / bin_dir / pyright_name
+    cmd = [str(venv_pyright), "--outputjson"] if venv_pyright.exists() else ["pyright", "--outputjson"]
     result = subprocess.run(
-        ["pyright", "--outputjson"],
+        cmd,
         cwd=backend_root,
         capture_output=True,
         text=True,

@@ -27,6 +27,7 @@ dependencies = [
     "uvicorn[standard]>=0.30.0",
     "python-multipart>=0.0.9",
     "triton-windows; sys_platform == 'win32'",
+    "gguf>=0.18.0",
 ]
 
 [[tool.uv.index]]
@@ -46,6 +47,8 @@ ltx-pipelines = { git = "https://github.com/Lightricks/LTX-2.git", subdirectory 
 [project.optional-dependencies]
 test = ["pytest>=8.0", "requests>=2.31", "httpx>=0.27"]
 dev = ["pyright>=1.1.380", "debugpy>=1.8"]
+# GGUF text encoding: quantized Gemma GGUF + embeddings connectors (same as reference ComfyUI workflow)
+gguf-text = ["llama-cpp-python>=0.2.44"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

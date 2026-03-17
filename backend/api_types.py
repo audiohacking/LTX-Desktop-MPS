@@ -134,6 +134,14 @@ class TextEncoderStatus(BaseModel):
     expected_size_gb: float
 
 
+class CheckPathRequest(BaseModel):
+    comfyuiModelsPath: str
+
+
+class CheckPathResponse(BaseModel):
+    all_downloaded: bool
+
+
 class ModelsStatusResponse(BaseModel):
     models: list[ModelFileStatus]
     all_downloaded: bool
@@ -157,7 +165,7 @@ class DownloadProgressResponse(BaseModel):
     filesCompleted: int
     totalFiles: int
     error: str | None
-    speedMbps: int
+    speedMbps: float
 
 
 class IcLoraModel(BaseModel):

@@ -1035,6 +1035,91 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
 
           {activeTab === 'inference' && (
             <>
+              {/* GGUF & ComfyUI (experimental, macOS-friendly) */}
+              {!forceApiGenerations && (
+                <div className="space-y-4 pb-4 border-b border-zinc-800">
+                  <div className="flex items-center gap-2">
+                    <svg className="h-4 w-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                    </svg>
+                    <h3 className="text-sm font-semibold text-white">Models (GGUF / ComfyUI)</h3>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">Experimental</span>
+                  </div>
+                  <p className="text-xs text-zinc-500 leading-relaxed">
+                    Use smaller GGUF quantized models (e.g. for Apple MPS). Optionally use a ComfyUI models folder so you can share models with ComfyUI. Restart required for changes to take effect.
+                  </p>
+                  <div className="bg-zinc-800/50 rounded-lg p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <label className="text-sm text-white">Use GGUF models</label>
+                        <p className="text-xs text-zinc-500">Download and use Unsloth LTX-2.3-GGUF (smaller, MPS-friendly)</p>
+                      </div>
+                      <button
+                        onClick={() => onSettingsChange({ ...settings, useGguf: !settings.useGguf })}
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                          settings.useGguf ? 'bg-amber-500' : 'bg-zinc-700'
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
+                            settings.useGguf ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    {settings.useGguf && (
+                      <>
+                        <div>
+                          <label className="text-xs text-zinc-400 block mb-1.5">Quantization</label>
+                          <select
+                            value={settings.ggufQuantization ?? 'Q4_K_M'}
+                            onChange={(e) => onSettingsChange({ ...settings, ggufQuantization: e.target.value })}
+                            className="w-full bg-zinc-900 text-white text-sm rounded-lg px-3 py-2 border border-zinc-700 focus:border-amber-500 focus:outline-none"
+                          >
+                            <option value="Q2_K">Q2_K (~8 GB)</option>
+                            <option value="Q3_K_S">Q3_K_S (~10 GB)</option>
+                            <option value="Q3_K_M">Q3_K_M (~12 GB)</option>
+                            <option value="Q4_K_S">Q4_K_S (~13 GB)</option>
+                            <option value="Q4_K_M">Q4_K_M (~14 GB)</option>
+                            <option value="Q5_K_S">Q5_K_S (~15 GB)</option>
+                            <option value="Q5_K_M">Q5_K_M (~17 GB)</option>
+                            <option value="Q6_K">Q6_K (~18 GB)</option>
+                            <option value="Q8_0">Q8_0 (~23 GB)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-zinc-400 block mb-1.5">ComfyUI models folder</label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={settings.comfyuiModelsPath ?? ''}
+                              onChange={(e) => onSettingsChange({ ...settings, comfyuiModelsPath: e.target.value })}
+                              placeholder="~/Documents/ComfyUI/models"
+                              className="flex-1 min-w-0 bg-zinc-900 text-white text-sm rounded-lg px-3 py-2 border border-zinc-700 focus:border-amber-500 focus:outline-none placeholder-zinc-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const dir = await window.electronAPI?.showOpenDirectoryDialog({ title: 'Select ComfyUI models folder' })
+                                if (dir) onSettingsChange({ ...settings, comfyuiModelsPath: dir })
+                              }}
+                              className="shrink-0 px-3 py-2 rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-300 text-sm font-medium hover:bg-zinc-700 hover:text-white transition-colors"
+                            >
+                              Browse
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-zinc-500 mt-1">Models are looked for in this folder and its subfolders (e.g. unet/, latent_upscale_models/). On macOS, leave empty to use ~/Documents/ComfyUI/models when present.</p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <div className="text-xs text-amber-400/80 flex items-center gap-1.5">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    Restart the app for model mode changes to take effect.
+                  </div>
+                </div>
+              )}
+
               {/* Fast Model Settings */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">

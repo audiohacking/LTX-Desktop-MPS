@@ -15,6 +15,7 @@ from services.services_utils import PromptInput, TensorOrNone, device_supports_f
 from state.app_state_types import CachedTextEncoder, TextEncodingResult
 
 if TYPE_CHECKING:
+    from runtime_config.runtime_config import RuntimeConfig
     from state.app_state_types import AppState
 
 logger = logging.getLogger(__name__)
@@ -30,17 +31,27 @@ class LTXTextEncoder:
         self._model_ledger_patched = False
         self._encode_text_patched = False
 
-    def install_patches(self, state_getter: Callable[[], AppState]) -> None:
-        self._install_model_ledger_patch(state_getter)
-        self._install_encode_text_patch(state_getter)
+    def install_patches(
+        self,
+        state_getter: Callable[[], AppState],
+        config: RuntimeConfig | None = None,
+    ) -> None:
+        self._install_model_ledger_patch(state_getter, config)
+        self._install_encode_text_patch(state_getter, config)
 
-    def _install_model_ledger_patch(self, state_getter: Callable[[], AppState]) -> None:
+    def _install_model_ledger_patch(
+        self,
+        state_getter: Callable[[], AppState],
+        config: RuntimeConfig | None = None,
+    ) -> None:
         if self._model_ledger_patched:
             return
 
         try:
             from ltx_pipelines.utils import ModelLedger
             from ltx_pipelines.utils import helpers as ltx_utils
+
+            from runtime_config.model_download_specs import resolve_gguf_text_encoder_paths
 
             original_text_encoder = ModelLedger.text_encoder
             original_cleanup_memory = ltx_utils.cleanup_memory
@@ -73,6 +84,14 @@ class LTXTextEncoder:
 
                 if te_state.api_embeddings is not None:
                     return DummyTextEncoder()
+
+                # GGUF mode: use quantized Gemma GGUF + connectors (same as reference ComfyUI)
+                if config is not None and getattr(config, "use_gguf", False):
+                    from pathlib import Path
+
+                    paths = resolve_gguf_text_encoder_paths(Path(config.model_path("text_encoder")))
+                    if paths is not None:
+                        return DummyTextEncoder()
 
                 if te_state.cached_encoder is not None:
                     try:
@@ -143,13 +162,22 @@ class LTXTextEncoder:
         except Exception as exc:
             logger.warning("Failed to patch ModelLedger: %s", exc, exc_info=True)
 
-    def _install_encode_text_patch(self, state_getter: Callable[[], AppState]) -> None:
+    def _install_encode_text_patch(
+        self,
+        state_getter: Callable[[], AppState],
+        config: RuntimeConfig | None = None,
+    ) -> None:
         if self._encode_text_patched:
             return
 
         try:
+            from pathlib import Path
+
             from ltx_core.text_encoders import gemma as text_enc_module
             from ltx_pipelines import distilled as distilled_module
+
+            from runtime_config.model_download_specs import resolve_gguf_text_encoder_paths
+            from services.gguf_text_encoder.encode import encode_text_gguf
 
             original_encode_text = text_enc_module.encode_text
 
@@ -176,6 +204,19 @@ class LTXTextEncoder:
                     return out
 
                 prompt_list = [prompts] if isinstance(prompts, str) else list(prompts)
+                # GGUF mode: quantized Gemma GGUF + embeddings connectors (same as reference ComfyUI)
+                if config is not None and getattr(config, "use_gguf", False):
+                    paths = resolve_gguf_text_encoder_paths(Path(config.model_path("text_encoder")))
+                    if paths is not None:
+                        gemma_path, connectors_path = paths
+                        return encode_text_gguf(
+                            gemma_path,
+                            connectors_path,
+                            prompt_list,
+                            self.device,
+                            dtype=torch.bfloat16,
+                        )
+
                 return cast(
                     list[tuple[torch.Tensor, TensorOrNone]],
                     original_encode_text(cast(Any, text_encoder), prompt_list, *args, **kwargs),
@@ -203,6 +244,8 @@ class LTXTextEncoder:
             logger.warning("Failed to patch encode_text: %s", exc, exc_info=True)
 
     def get_model_id_from_checkpoint(self, checkpoint_path: str) -> str | None:
+        if checkpoint_path.endswith(".gguf"):
+            return None  # GGUF files have no safetensors metadata; use local encoder or fixed id
         try:
             from safetensors import safe_open
 

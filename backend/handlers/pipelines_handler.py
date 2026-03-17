@@ -11,6 +11,7 @@ import torch
 
 from handlers.base import StateHandlerBase
 from handlers.text_handler import TextHandler
+from services.fast_video_pipeline.gguf_stub_pipeline import GGUFStubFastVideoPipeline
 from services.interfaces import (
     A2VPipeline,
     FastVideoPipeline,
@@ -99,7 +100,7 @@ class PipelinesHandler(StateHandlerBase):
         te = self.state.text_encoder
         if te is None:
             return
-        te.service.install_patches(lambda: self.state)
+        te.service.install_patches(lambda: self.state, self._config)
 
     def _compile_if_enabled(self, state: VideoPipelineState) -> VideoPipelineState:
         if not self.state.app_settings.use_torch_compile:
@@ -119,16 +120,32 @@ class PipelinesHandler(StateHandlerBase):
 
     def _create_video_pipeline(self, model_type: VideoPipelineModelType) -> VideoPipelineState:
         gemma_root = self._text_handler.resolve_gemma_root()
-
         checkpoint_path = str(self._config.model_path("checkpoint"))
         upsampler_path = str(self._config.model_path("upsampler"))
-
-        pipeline = self._fast_video_pipeline_class.create(
+        logger.info(
+            "Creating fast video pipeline: checkpoint=%s (use_gguf=%s), gemma_root=%s",
             checkpoint_path,
+            self._config.use_gguf,
             gemma_root,
-            upsampler_path,
-            self._device,
         )
+        try:
+            pipeline = self._fast_video_pipeline_class.create(
+                checkpoint_path,
+                gemma_root,
+                upsampler_path,
+                self._device,
+            )
+        except RuntimeError as e:
+            if self._config.use_gguf and "GGUF" in str(e):
+                logger.warning("GGUF in-process load failed, using stub: %s", e)
+                pipeline = GGUFStubFastVideoPipeline.create(
+                    checkpoint_path="",
+                    gemma_root=None,
+                    upsampler_path="",
+                    device=self._device,
+                )
+            else:
+                raise
 
         state = VideoPipelineState(
             pipeline=pipeline,
@@ -276,7 +293,14 @@ class PipelinesHandler(StateHandlerBase):
 
         return state
 
+    def _raise_gguf_unsupported(self, feature: str) -> None:
+        if self._config.use_gguf:
+            raise RuntimeError(
+                f"GGUF mode: {feature} is not supported. Use the Fast model or run without LTX_USE_GGUF."
+            )
+
     def load_ic_lora(self, lora_path: str) -> ICLoraState:
+        self._raise_gguf_unsupported("IC-LoRA pipeline")
         self._install_text_patches_if_needed()
 
         with self._lock:
@@ -303,6 +327,7 @@ class PipelinesHandler(StateHandlerBase):
         return state
 
     def load_a2v_pipeline(self) -> A2VPipelineState:
+        self._raise_gguf_unsupported("A2V pipeline")
         self._install_text_patches_if_needed()
 
         with self._lock:
@@ -328,6 +353,7 @@ class PipelinesHandler(StateHandlerBase):
         return state
 
     def load_retake_pipeline(self, *, distilled: bool = True) -> RetakePipelineState:
+        self._raise_gguf_unsupported("Retake pipeline")
         self._install_text_patches_if_needed()
 
         quantized = device_supports_fp8(self._device)

@@ -359,9 +359,10 @@ class FakeModelDownloader:
         filename: str,
         local_dir: str,
         on_progress: Callable[[int, int], None] | None = None,
+        expected_size_bytes: int | None = None,
     ) -> Path:
         self._raise_if_needed()
-        self.calls.append({"kind": "file", "repo_id": repo_id, "filename": filename, "local_dir": local_dir, "on_progress": on_progress})
+        self.calls.append({"kind": "file", "repo_id": repo_id, "filename": filename, "local_dir": local_dir, "on_progress": on_progress, "expected_size_bytes": expected_size_bytes})
 
         if on_progress is not None:
             on_progress(512, 1024)
@@ -377,6 +378,7 @@ class FakeModelDownloader:
         repo_id: str,
         local_dir: str,
         on_progress: Callable[[int, int], None] | None = None,
+        expected_size_bytes: int | None = None,
     ) -> Path:
         self._raise_if_needed()
         self.calls.append(
@@ -385,6 +387,7 @@ class FakeModelDownloader:
                 "repo_id": repo_id,
                 "local_dir": local_dir,
                 "on_progress": on_progress,
+                "expected_size_bytes": expected_size_bytes,
             }
         )
 
@@ -778,7 +781,7 @@ class FakeTextEncoder:
         self.encode_calls: list[dict[str, Any]] = []
         self.encode_responses: list[Any] = []
 
-    def install_patches(self, state_getter) -> None:  # noqa: ARG002
+    def install_patches(self, state_getter, config=None) -> None:  # noqa: ARG002
         self.install_calls += 1
 
     def encode_via_api(self, prompt: str, api_key: str, checkpoint_path: str, enhance_prompt: bool) -> Any | None:

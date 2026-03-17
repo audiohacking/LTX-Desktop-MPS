@@ -26,7 +26,8 @@
     "prepare:python:mac": "bash scripts/prepare-python.sh",
     "prepare:python:win": "powershell -ExecutionPolicy Bypass -File scripts/prepare-python.ps1",
     "build:frontend": "vite build",
-    "start:unpacked:mac": "open release/mac-arm64/LTX\\ Desktop.app",
+    "start:unpacked:mac": "open \"release/mac-arm64/Director's Desktop.app\"",
+    "start:gguf:mac": "LTX_USE_GGUF=1 \"release/mac-arm64/Director's Desktop.app/Contents/MacOS/Director's Desktop\"",
     "start:unpacked:win": "powershell -Command \"& '.\\release\\win-unpacked\\LTX Desktop.exe'\""
   },
   "dependencies": {

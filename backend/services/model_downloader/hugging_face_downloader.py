@@ -46,24 +46,33 @@ def _make_progress_tqdm_class(callback: Callable[[int, int], None]) -> type:
 
 
 @contextlib.contextmanager
-def _patch_http_get_progress(callback: Callable[[int, int], None]) -> Iterator[None]:
+def _patch_http_get_progress(
+    callback: Callable[[int, int], None],
+    expected_size_bytes: int | None = None,
+) -> Iterator[None]:
     """Temporarily monkey-patch ``huggingface_hub.file_download.http_get``
     to inject a custom tqdm bar that forwards progress to *callback*.
 
     ``hf_hub_download`` does not expose a ``tqdm_class`` parameter (unlike
     ``snapshot_download``), but its internal ``http_get`` accepts a private
     ``_tqdm_bar`` kwarg.  We wrap ``http_get`` to inject our own bar when
-    the caller hasn't already provided one.
+    the caller hasn't already provided one. If *expected_size_bytes* is set,
+    the tqdm is created with that total so progress reports a known total from
+    the start (avoids progress bar appearing stuck when the server delays
+    sending Content-Length).
 
     See ``test_http_get_accepts_tqdm_bar`` — if that test breaks after a
     huggingface_hub upgrade, this patch needs to be revisited.
     """
     tqdm_cls = _make_progress_tqdm_class(callback)
     original_http_get: Callable[..., Any] = file_download.http_get  # type: ignore[reportUnknownMemberType]
+    tqdm_kw: dict[str, Any] = {"disable": True}
+    if expected_size_bytes is not None and expected_size_bytes > 0:
+        tqdm_kw["total"] = expected_size_bytes
 
     def _wrapped_http_get(*args: Any, **kwargs: Any) -> None:
         if kwargs.get("_tqdm_bar") is None:
-            kwargs["_tqdm_bar"] = tqdm_cls(disable=True)
+            kwargs["_tqdm_bar"] = tqdm_cls(**tqdm_kw)
         return original_http_get(*args, **kwargs)
 
     with patch.object(file_download, "http_get", _wrapped_http_get):
@@ -79,8 +88,13 @@ class HuggingFaceDownloader:
         filename: str,
         local_dir: str,
         on_progress: Callable[[int, int], None] | None = None,
+        expected_size_bytes: int | None = None,
     ) -> Path:
-        ctx = _patch_http_get_progress(on_progress) if on_progress is not None else contextlib.nullcontext()
+        ctx = (
+            _patch_http_get_progress(on_progress, expected_size_bytes)
+            if on_progress is not None
+            else contextlib.nullcontext()
+        )
         with ctx:
             path: str = hf_hub_download(repo_id=repo_id, filename=filename, local_dir=local_dir)
         return Path(path)
@@ -90,8 +104,13 @@ class HuggingFaceDownloader:
         repo_id: str,
         local_dir: str,
         on_progress: Callable[[int, int], None] | None = None,
+        expected_size_bytes: int | None = None,
     ) -> Path:
-        ctx = _patch_http_get_progress(on_progress) if on_progress is not None else contextlib.nullcontext()
+        ctx = (
+            _patch_http_get_progress(on_progress, expected_size_bytes)
+            if on_progress is not None
+            else contextlib.nullcontext()
+        )
         with ctx:
             path: str = snapshot_download(repo_id=repo_id, local_dir=local_dir)
         return Path(path)

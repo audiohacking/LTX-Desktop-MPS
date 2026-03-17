@@ -184,7 +184,8 @@ if use_sage_attention:
 # Constants & Paths
 # ============================================================
 
-PORT = 8000
+# Default 8010 to avoid colliding with ComfyUI (often 8000 or 8188)
+PORT = int(os.environ.get("LTX_BACKEND_PORT", "8010"))
 
 
 def _get_device() -> torch.device:
@@ -240,9 +241,16 @@ DEFAULT_APP_SETTINGS = AppSettings()
 
 from app_factory import DEFAULT_ALLOWED_ORIGINS, create_app
 from state import RuntimeConfig, build_initial_state
-from runtime_config.model_download_specs import DEFAULT_MODEL_DOWNLOAD_SPECS, DEFAULT_REQUIRED_MODEL_TYPES
+from runtime_config.model_download_specs import (
+    DEFAULT_MODEL_DOWNLOAD_SPECS,
+    DEFAULT_REQUIRED_MODEL_TYPES,
+    get_gguf_model_download_specs,
+    GGUF_REQUIRED_MODEL_TYPES,
+)
 from runtime_config.runtime_policy import decide_force_api_generations
 from state.app_state_types import ModelFileType
+from state.app_settings import DEFAULT_GGUF_QUANTIZATION, GGUF_QUANTIZATION_CHOICES
+from handlers.settings_handler import load_settings_from_file
 from server_utils.model_layout_migration import migrate_legacy_models_layout
 from services.gpu_info.gpu_info_impl import GpuInfoImpl
 
@@ -250,6 +258,19 @@ migrate_legacy_models_layout(APP_DATA_DIR)
 IC_LORA_DIR.mkdir(parents=True, exist_ok=True)
 
 LTX_API_BASE_URL = "https://api.ltx.video"
+
+# Load settings from disk before building config so use_gguf / quantization / ComfyUI path apply on restart.
+_initial_settings = load_settings_from_file(SETTINGS_FILE, DEFAULT_APP_SETTINGS)
+
+
+def _resolve_comfyui_models_base(comfyui_models_path: str) -> Path | None:
+    """Resolve ComfyUI models base path; on macOS default to ~/Documents/ComfyUI/models when empty."""
+    raw = (os.environ.get("LTX_COMFYUI_MODELS_PATH") or comfyui_models_path or "").strip()
+    if not raw and platform.system() == "Darwin":
+        raw = os.path.expanduser("~/Documents/ComfyUI/models")
+    if not raw:
+        return None
+    return Path(raw).expanduser().resolve()
 
 
 def _resolve_force_api_generations() -> bool:
@@ -275,8 +296,28 @@ def _resolve_force_api_generations() -> bool:
 
 
 FORCE_API_GENERATIONS = _resolve_force_api_generations()
+
+# GGUF and ComfyUI: settings drive mode; ENV can override use_gguf / quantization for bootstrap.
+USE_GGUF = os.environ.get("LTX_USE_GGUF", "").strip() == "1" or _initial_settings.use_gguf
+gguf_quantization = (
+    os.environ.get("LTX_GGUF_QUANTIZATION", "").strip() or _initial_settings.gguf_quantization or DEFAULT_GGUF_QUANTIZATION
+)
+if gguf_quantization not in GGUF_QUANTIZATION_CHOICES:
+    gguf_quantization = DEFAULT_GGUF_QUANTIZATION
+COMFYUI_BASE = _resolve_comfyui_models_base(_initial_settings.comfyui_models_path or "")
+
+if USE_GGUF:
+    logger.info(
+        "Using Unsloth LTX-2.3-GGUF (quantization=%s, comfyui_base=%s)",
+        gguf_quantization,
+        COMFYUI_BASE or "none",
+    )
+
+MODEL_DOWNLOAD_SPECS = get_gguf_model_download_specs(gguf_quantization) if USE_GGUF else DEFAULT_MODEL_DOWNLOAD_SPECS
 REQUIRED_MODEL_TYPES: frozenset[ModelFileType] = (
-    frozenset() if FORCE_API_GENERATIONS else DEFAULT_REQUIRED_MODEL_TYPES
+    frozenset()
+    if FORCE_API_GENERATIONS
+    else (GGUF_REQUIRED_MODEL_TYPES if USE_GGUF else DEFAULT_REQUIRED_MODEL_TYPES)
 )
 
 CAMERA_MOTION_PROMPTS = {
@@ -296,7 +337,7 @@ DEFAULT_NEGATIVE_PROMPT = """blurry, out of focus, overexposed, underexposed, lo
 runtime_config = RuntimeConfig(
     device=DEVICE,
     models_dir=MODELS_DIR,
-    model_download_specs=DEFAULT_MODEL_DOWNLOAD_SPECS,
+    model_download_specs=MODEL_DOWNLOAD_SPECS,
     required_model_types=REQUIRED_MODEL_TYPES,
     outputs_dir=OUTPUTS_DIR,
     ic_lora_dir=IC_LORA_DIR,
@@ -304,11 +345,14 @@ runtime_config = RuntimeConfig(
     ltx_api_base_url=LTX_API_BASE_URL,
     force_api_generations=FORCE_API_GENERATIONS,
     use_sage_attention=use_sage_attention,
+    use_gguf=USE_GGUF,
+    gguf_quantization=gguf_quantization,
+    comfyui_models_base=COMFYUI_BASE,
     camera_motion_prompts=CAMERA_MOTION_PROMPTS,
     default_negative_prompt=DEFAULT_NEGATIVE_PROMPT,
 )
 
-handler = build_initial_state(runtime_config, DEFAULT_APP_SETTINGS)
+handler = build_initial_state(runtime_config, _initial_settings)
 app = create_app(handler=handler, allowed_origins=DEFAULT_ALLOWED_ORIGINS)
 
 
@@ -317,7 +361,7 @@ def precache_model_files(model_dir: Path) -> int:
         return 0
     total_bytes = 0
     for f in model_dir.rglob("*"):
-        if f.is_file() and f.suffix in (".safetensors", ".bin", ".pt", ".pth", ".onnx", ".model"):
+        if f.is_file() and f.suffix in (".safetensors", ".gguf", ".bin", ".pt", ".pth", ".onnx", ".model"):
             try:
                 size = f.stat().st_size
                 with open(f, "rb") as fh:
@@ -388,4 +432,13 @@ if __name__ == "__main__":
             "uvicorn.access": {"handlers": ["default"], "level": "INFO", "propagate": False},
         },
     }
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="info", access_log=False, log_config=log_config)
+    try:
+        uvicorn.run(app, host="127.0.0.1", port=port, log_level="info", access_log=False, log_config=log_config)
+    except OSError as e:
+        if e.errno == 48 or "address already in use" in str(e).lower():
+            logger.error(
+                "Port %s is already in use. Quit the other app using it (e.g. another Director's Desktop, "
+                "ComfyUI, or a terminal process) or free the port, then restart Director's Desktop.",
+                port,
+            )
+        raise

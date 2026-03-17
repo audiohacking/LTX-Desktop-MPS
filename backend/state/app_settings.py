@@ -59,6 +59,22 @@ class ProModelSettings(SettingsBaseModel):
         return _clamp_int(value, minimum=1, maximum=100, default=20)
 
 
+# Supported GGUF quantization identifiers (Unsloth LTX-2.3-GGUF filenames).
+GGUF_QUANTIZATION_CHOICES: tuple[str, ...] = (
+    "Q2_K",
+    "Q3_K_S",
+    "Q3_K_M",
+    "Q4_K_S",
+    "Q4_K_M",
+    "Q5_K_S",
+    "Q5_K_M",
+    "Q6_K",
+    "Q8_0",
+)
+
+DEFAULT_GGUF_QUANTIZATION = "Q4_K_M"
+
+
 class AppSettings(SettingsBaseModel):
     use_torch_compile: bool = False
     load_on_startup: bool = False
@@ -77,6 +93,10 @@ class AppSettings(SettingsBaseModel):
     gemini_api_key: str = ""
     seed_locked: bool = False
     locked_seed: int = 42
+    # GGUF / ComfyUI (experimental, macOS-friendly)
+    use_gguf: bool = False
+    gguf_quantization: str = DEFAULT_GGUF_QUANTIZATION
+    comfyui_models_path: str = ""
 
     @field_validator("prompt_cache_size", mode="before")
     @classmethod
@@ -87,6 +107,14 @@ class AppSettings(SettingsBaseModel):
     @classmethod
     def _clamp_locked_seed(cls, value: Any) -> int:
         return _clamp_int(value, minimum=0, maximum=2_147_483_647, default=42)
+
+    @field_validator("gguf_quantization", mode="before")
+    @classmethod
+    def _normalize_gguf_quantization(cls, value: Any) -> str:
+        if value is None or value == "":
+            return DEFAULT_GGUF_QUANTIZATION
+        s = str(value).strip()
+        return s if s in GGUF_QUANTIZATION_CHOICES else DEFAULT_GGUF_QUANTIZATION
 
 
 SettingsModelT = TypeVar("SettingsModelT", bound=SettingsBaseModel)
@@ -151,6 +179,9 @@ class SettingsResponse(SettingsBaseModel):
     has_gemini_api_key: bool = False
     seed_locked: bool = False
     locked_seed: int = 42
+    use_gguf: bool = False
+    gguf_quantization: str = DEFAULT_GGUF_QUANTIZATION
+    comfyui_models_path: str = ""
 
 
 def to_settings_response(settings: AppSettings) -> SettingsResponse:
