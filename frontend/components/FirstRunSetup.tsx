@@ -114,9 +114,9 @@ export function LaunchGate({
 
         // Get models path from backend
         try {
-          const url = await window.electronAPI.getBackendUrl()
+          const { url } = await window.electronAPI.getBackend()
           setBackendUrl(url)
-          const response = await fetch(`${url}/api/models/status`)
+          const response = await (await import('../lib/backend')).backendFetch('/api/models/status')
           if (response.ok) {
             const data = await response.json()
             if (data.models_path) {
@@ -156,7 +156,7 @@ export function LaunchGate({
 
     const pollProgress = async () => {
       try {
-        const response = await fetch(`${backendUrl}/api/models/download/progress`)
+        const response = await (await import('../lib/backend')).backendFetch('/api/models/download/progress')
         if (response.ok) {
           const progress = await response.json()
           setDownloadProgress(progress)
@@ -185,7 +185,7 @@ export function LaunchGate({
       // If API key is provided, save it to settings first and skip text encoder download
       if (ltxApiKey.trim()) {
         try {
-          await fetch(`${backendUrl}/api/settings`, {
+          await (await import('../lib/backend')).backendFetch('/api/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ltxApiKey: ltxApiKey.trim() }),
@@ -196,7 +196,7 @@ export function LaunchGate({
       }
 
       // Start download - skip text encoder if API key is provided
-      await fetch(`${backendUrl}/api/models/download`, {
+      await (await import('../lib/backend')).backendFetch('/api/models/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ skipTextEncoder: !!ltxApiKey.trim() }),

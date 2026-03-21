@@ -3,6 +3,7 @@ import { ArrowLeft, Plus, Pencil, Trash2, Palette, X } from 'lucide-react'
 import { useProjects } from '../contexts/ProjectContext'
 import { LtxLogo } from '../components/LtxLogo'
 import { Button } from '../components/ui/button'
+import { backendFetch } from '../lib/backend'
 import { logger } from '../lib/logger'
 
 /** API uses reference_image_path (filesystem path); we convert to file:// for <img src>. */
@@ -36,8 +37,7 @@ export function Styles() {
     setLoading(true)
     setError(null)
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
-      const res = await fetch(`${backendUrl}/api/library/styles`)
+      const res = await backendFetch('/api/library/styles')
       if (!res.ok) throw new Error(`Failed to fetch styles: ${res.status}`)
       const data = (await res.json()) as { styles: unknown[] }
       setStyles(
@@ -85,21 +85,20 @@ export function Styles() {
     if (!formName.trim()) return
     setSaving(true)
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
       const body = {
         name: formName.trim(),
         description: formDescription.trim(),
         reference_image_path: formImage || '',
       }
       if (editingStyle) {
-        const res = await fetch(`${backendUrl}/api/library/styles/${editingStyle.id}`, {
+        const res = await backendFetch(`/api/library/styles/${editingStyle.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         })
         if (!res.ok) throw new Error(`Update failed: ${res.status}`)
       } else {
-        const res = await fetch(`${backendUrl}/api/library/styles`, {
+        const res = await backendFetch('/api/library/styles', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -118,8 +117,7 @@ export function Styles() {
   const handleDelete = async (style: Style) => {
     if (!confirm(`Delete style "${style.name}"?`)) return
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
-      const res = await fetch(`${backendUrl}/api/library/styles/${style.id}`, { method: 'DELETE' })
+      const res = await backendFetch(`/api/library/styles/${style.id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error(`Delete failed: ${res.status}`)
       setStyles(prev => prev.filter(s => s.id !== style.id))
     } catch (e) {

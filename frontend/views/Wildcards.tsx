@@ -3,6 +3,7 @@ import { ArrowLeft, Plus, Pencil, Trash2, Braces, X, Shuffle, ChevronDown, Chevr
 import { useProjects } from '../contexts/ProjectContext'
 import { LtxLogo } from '../components/LtxLogo'
 import { Button } from '../components/ui/button'
+import { backendFetch } from '../lib/backend'
 import { logger } from '../lib/logger'
 
 interface Wildcard {
@@ -30,8 +31,7 @@ export function Wildcards() {
     setLoading(true)
     setError(null)
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
-      const res = await fetch(`${backendUrl}/api/wildcards`)
+      const res = await backendFetch('/api/wildcards')
       if (!res.ok) throw new Error(`Failed to fetch wildcards: ${res.status}`)
       const data = (await res.json()) as { wildcards: Wildcard[] }
       setWildcards(data.wildcards ?? [])
@@ -66,18 +66,17 @@ export function Wildcards() {
     if (!formName.trim() || !formValues.trim()) return
     setSaving(true)
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
       const values = formValues.split('\n').map(v => v.trim()).filter(Boolean)
       const body = { name: formName.trim(), values }
       if (editingWildcard) {
-        const res = await fetch(`${backendUrl}/api/wildcards/${editingWildcard.id}`, {
+        const res = await backendFetch(`/api/wildcards/${editingWildcard.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         })
         if (!res.ok) throw new Error(`Update failed: ${res.status}`)
       } else {
-        const res = await fetch(`${backendUrl}/api/wildcards`, {
+        const res = await backendFetch('/api/wildcards', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -96,8 +95,7 @@ export function Wildcards() {
   const handleDelete = async (wc: Wildcard) => {
     if (!confirm(`Delete wildcard "_${wc.name}_"?`)) return
     try {
-      const backendUrl = await window.electronAPI.getBackendUrl()
-      const res = await fetch(`${backendUrl}/api/wildcards/${wc.id}`, { method: 'DELETE' })
+      const res = await backendFetch(`/api/wildcards/${wc.id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error(`Delete failed: ${res.status}`)
       setWildcards(prev => prev.filter(w => w.id !== wc.id))
     } catch (e) {

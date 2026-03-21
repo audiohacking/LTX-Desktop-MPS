@@ -23,6 +23,7 @@ import { LogViewer } from './components/LogViewer'
 import { ApiGatewayModal, type ApiGatewaySection } from './components/ApiGatewayModal'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Button } from './components/ui/button'
+import { backendFetch } from './lib/backend'
 
 type SetupState = 'loading' | { needsSetup: boolean; needsLicense: boolean }
 type RequiredModelsGateState = 'checking' | 'missing' | 'ready'
@@ -189,8 +190,7 @@ function AppContent() {
     isForcedFirstRun && isLoaded && settings.hasLtxApiKey && !isFinalizingFirstRun && !firstRunFinalizeError
 
   const areRequiredModelsDownloaded = useCallback(async () => {
-    const backendUrl = await window.electronAPI.getBackendUrl()
-    const response = await fetch(`${backendUrl}/api/models/status`)
+    const response = await backendFetch('/api/models/status')
     if (!response.ok) {
       throw new Error(`Model status fetch failed with status ${response.status}`)
     }

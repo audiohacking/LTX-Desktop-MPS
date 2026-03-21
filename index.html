@@ -17,7 +17,7 @@
       if (!window.electronAPI && location.protocol === 'http:') {
         const noop = () => Promise.resolve();
         window.electronAPI = {
-          getBackendUrl: () => Promise.resolve('http://localhost:8000'),
+          getBackend: () => Promise.resolve({ url: 'http://localhost:8000', token: '' }),
           getModelsPath: () => Promise.resolve('C:/models'),
           readLocalFile: () => Promise.resolve({ data: '', mimeType: 'image/png' }),
           checkGpu: () => Promise.resolve({ available: true, name: 'NVIDIA RTX 4090', vram: 24576 }),

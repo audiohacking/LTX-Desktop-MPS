@@ -453,8 +453,7 @@ export function useGapGeneration({
         }
       }
       
-      const backendUrl = await window.electronAPI.getBackendUrl()
-      const response = await fetch(`${backendUrl}/api/suggest-gap-prompt`, {
+      const response = await (await import('../../lib/backend')).backendFetch('/api/suggest-gap-prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
