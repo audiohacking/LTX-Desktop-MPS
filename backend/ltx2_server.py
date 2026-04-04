@@ -24,6 +24,12 @@ import threading
 # Note: expandable_segments is not supported on all platforms
 
 import torch
+
+from services.mps_cuda_compat_shim import apply_mps_cuda_compat_shim
+
+# Before ltx_pipelines runs: map torch.cuda.synchronize/empty_cache to MPS on Mac.
+apply_mps_cuda_compat_shim()
+
 from state.app_settings import AppSettings
 
 # ============================================================
