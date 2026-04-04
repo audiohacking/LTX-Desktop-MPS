@@ -30,6 +30,7 @@ from ltx_core.types import Audio
 from ltx_pipelines.utils.media_io import get_videostream_metadata
 
 from services.ltx_pipeline_common import encode_video_output
+from services.ltx_pipeline_forward_lock import with_ltx_pipeline_forward_lock
 from services.retake_pipeline.retake_pipeline import RetakePipeline
 from services.services_utils import sync_device
 
@@ -84,6 +85,7 @@ class LTXRetakePipeline:
             device=device,
         )
 
+    @with_ltx_pipeline_forward_lock
     @torch.no_grad()
     def _run(  # noqa: PLR0913, PLR0915
         self,

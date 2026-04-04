@@ -10,6 +10,7 @@ import torch
 
 from api_types import ImageConditioningInput
 from services.ltx_pipeline_common import default_tiling_config, encode_video_output, video_chunks_number
+from services.ltx_pipeline_forward_lock import with_ltx_pipeline_forward_lock
 from services.services_utils import AudioOrNone, TilingConfigType, device_supports_fp8
 
 
@@ -43,6 +44,7 @@ class LTXFastVideoPipeline:
             quantization=QuantizationPolicy.fp8_cast() if device_supports_fp8(device) else None,
         )
 
+    @with_ltx_pipeline_forward_lock
     def _run_inference(
         self,
         prompt: str,
