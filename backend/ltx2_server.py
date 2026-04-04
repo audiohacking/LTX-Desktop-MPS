@@ -74,12 +74,16 @@ def _setup_cuda_fallback() -> None:
 
     # Create safe no-op implementations for CUDA functions
     def safe_cuda_synchronize(device: object = None) -> None:
-        """No-op synchronize for non-CUDA devices; delegates to MPS when available."""
-        if device_type == "mps":
-            try:
-                torch.mps.synchronize()
-            except (RuntimeError, AttributeError) as exc:
-                logger.debug("MPS synchronize fallback failed: %s", exc)
+        """No-op on MPS/CPU for non-CUDA PyTorch builds.
+
+        Do **not** call ``torch.mps.synchronize()`` here: ltx-pipelines invokes
+        ``torch.cuda.synchronize()`` at many stage boundaries. Mapping that to a
+        global MPS synchronize triggers Metal assert
+        ``commit an already committed command buffer`` (PyTorch 2.10 / MPS),
+        killing the process. Tensor copies (e.g. ``.cpu()``) still synchronize
+        their own streams as needed.
+        """
+        return
 
     def safe_cuda_empty_cache() -> None:
         """No-op empty_cache for non-CUDA devices; delegates to MPS when available."""

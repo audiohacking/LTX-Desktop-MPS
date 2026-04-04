@@ -33,6 +33,29 @@ def video_chunks_number(num_frames: int, tiling_config: TilingConfigType | None)
     return int(get_video_chunks_number(num_frames, tiling_config))
 
 
+def _mps_chunk_to_cpu_for_encode(chunk: torch.Tensor) -> torch.Tensor:
+    """Move a decoded VAE chunk to CPU with a blocking, contiguous copy (MPS-safe).
+
+    Global ``torch.mps.synchronize()`` is avoided (Metal double-commit risk). A
+    blocking ``.to("cpu", non_blocking=False)`` waits for that tensor's MPS work
+    before NumPy/PyAV read the memory—critical for multi-chunk / long clips.
+    """
+    if chunk.device.type != "mps":
+        return chunk
+    return chunk.detach().contiguous().to("cpu", non_blocking=False)
+
+
+def _video_for_encode_host_safe(video: torch.Tensor | Iterator[torch.Tensor]) -> torch.Tensor | Iterator[torch.Tensor]:
+    if isinstance(video, torch.Tensor):
+        return _mps_chunk_to_cpu_for_encode(video)
+
+    def _iter_host_safe(src: Iterator[torch.Tensor]) -> Iterator[torch.Tensor]:
+        for c in src:
+            yield _mps_chunk_to_cpu_for_encode(c)
+
+    return _iter_host_safe(iter(video))
+
+
 def encode_video_output(
     video: torch.Tensor | Iterator[torch.Tensor],
     audio: AudioOrNone,
@@ -42,8 +65,9 @@ def encode_video_output(
 ) -> None:
     from ltx_pipelines.utils.media_io import encode_video
 
+    video_ready = _video_for_encode_host_safe(video)
     encode_video(
-        video=video,
+        video=video_ready,
         fps=fps,
         audio=audio,
         output_path=output_path,

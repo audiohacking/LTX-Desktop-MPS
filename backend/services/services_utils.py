@@ -64,6 +64,15 @@ def device_supports_fp8(device: str | torch.device | object | None) -> bool:
 
 
 def sync_device(device: str | torch.device | object | None) -> None:
+    """Best-effort device-wide barrier after heavy GPU work.
+
+    On **MPS**, do **not** call ``torch.mps.synchronize()`` here. That API plus
+    PyTorch's internal Metal command-buffer scheduling can hit
+    ``commit an already committed command buffer`` when invoked frequently (e.g.
+    around text-encoder caching). Prefer **tensor-scoped** host copies
+    (``tensor.contiguous().to("cpu", non_blocking=False)``) at consumption
+    boundaries—see ``encode_video_output`` in ``ltx_pipeline_common``.
+    """
     device_type = get_device_type(device)
     if device_type == "cuda":
         try:
@@ -72,11 +81,9 @@ def sync_device(device: str | torch.device | object | None) -> None:
             logger.warning("torch.cuda.synchronize() failed", exc_info=True)
         return
 
-    if device_type == "mps" and hasattr(torch, "mps"):
-        try:
-            torch.mps.synchronize()
-        except Exception:
-            logger.warning("torch.mps.synchronize() failed", exc_info=True)
+    # MPS: intentional no-op (global synchronize is unsafe with current Metal/MPS stack).
+    if device_type == "mps":
+        return
 
 
 def empty_device_cache(device: str | torch.device | object | None) -> None:

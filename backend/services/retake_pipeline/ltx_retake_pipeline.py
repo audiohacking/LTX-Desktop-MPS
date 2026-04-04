@@ -27,8 +27,9 @@ from ltx_core.loader import LoraPathStrengthAndSDOps
 from ltx_core.model.video_vae import TilingConfig, get_video_chunks_number
 from ltx_core.quantization import QuantizationPolicy
 from ltx_core.types import Audio
-from ltx_pipelines.utils.media_io import encode_video, get_videostream_metadata
+from ltx_pipelines.utils.media_io import get_videostream_metadata
 
+from services.ltx_pipeline_common import encode_video_output
 from services.retake_pipeline.retake_pipeline import RetakePipeline
 from services.services_utils import sync_device
 
@@ -373,10 +374,10 @@ class LTXRetakePipeline:
         audio_out: Audio | None = audio
         tiling_config = TilingConfig.default()
         video_chunks = get_video_chunks_number(num_frames, tiling_config)
-        encode_video(
+        encode_video_output(
             video=video_iter,
-            fps=int(fps),
             audio=audio_out,
+            fps=int(fps),
             output_path=output_path,
-            video_chunks_number=video_chunks,
+            video_chunks_number_value=video_chunks,
         )
