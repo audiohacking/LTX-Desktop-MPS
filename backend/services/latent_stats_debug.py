@@ -1,8 +1,17 @@
-"""Latent tensor diagnostics for MPS / long-clip debugging (temporary).
+"""Latent tensor diagnostics for MPS / long-clip debugging (opt-in only).
 
-**On by default** — bundled apps cannot set env easily. Flip
-``LATENT_STATS_DEBUG_ENABLED`` to ``False`` (or set env
-``LTX_DEBUG_LATENT_STATS=0``) before release.
+**Do not leave hooks enabled in shipped builds.** Wrapping
+``denoise_audio_video`` / ``vae_decode_video`` perturbs MPS/Metal scheduling and
+has caused crashes during VAE decode (Metal command-buffer asserts) even when
+logging only tensor metadata.
+
+Enable **one** of:
+
+* Set ``LATENT_STATS_DEBUG_ENABLED = True`` in this module (local dev / custom
+  bundles), or
+* Set env ``LTX_DEBUG_LATENT_STATS=1`` when launching Python.
+
+Disable: default (both off), or ``LTX_DEBUG_LATENT_STATS=0``.
 
 Patches ``ltx_pipelines.distilled`` so each distilled generation logs:
 
@@ -25,13 +34,15 @@ from typing import Any
 
 import torch
 
-# TODO(debug): set False (or use LTX_DEBUG_LATENT_STATS=0) before shipping a release build.
-LATENT_STATS_DEBUG_ENABLED = True
+# Opt-in: True patches distilled (risky on MPS). Prefer env LTX_DEBUG_LATENT_STATS=1 for CLI dev.
+LATENT_STATS_DEBUG_ENABLED = False
 
 logger = logging.getLogger("latent_stats_debug")
 
 _hooks_installed = False
 _denoise_pass: list[int] = [0]
+_saved_denoise: Any | None = None
+_saved_decode: Any | None = None
 
 
 def latent_stat_dict(t: torch.Tensor) -> dict[str, Any]:
@@ -120,20 +131,39 @@ def _log_latent(label: str, t: torch.Tensor) -> None:
     )
 
 
+def uninstall_latent_stats_hooks() -> None:
+    """Restore ``ltx_pipelines.distilled`` bindings (tests / teardown)."""
+    global _hooks_installed, _saved_denoise, _saved_decode
+    if not _hooks_installed or _saved_denoise is None or _saved_decode is None:
+        _hooks_installed = False
+        _saved_denoise = None
+        _saved_decode = None
+        return
+    import ltx_pipelines.distilled as distilled_mod
+
+    distilled_mod.denoise_audio_video = _saved_denoise  # type: ignore[method-assign]
+    distilled_mod.vae_decode_video = _saved_decode  # type: ignore[method-assign]
+    _hooks_installed = False
+    _saved_denoise = None
+    _saved_decode = None
+
+
 def install_latent_stats_hooks() -> None:
     """Patch ``ltx_pipelines.distilled`` callables; idempotent."""
-    global _hooks_installed
+    global _hooks_installed, _saved_denoise, _saved_decode
     if _hooks_installed:
         return
-    if not LATENT_STATS_DEBUG_ENABLED:
-        return
     if os.environ.get("LTX_DEBUG_LATENT_STATS") == "0":
+        return
+    if not LATENT_STATS_DEBUG_ENABLED and os.environ.get("LTX_DEBUG_LATENT_STATS") != "1":
         return
 
     import ltx_pipelines.distilled as distilled_mod
 
     _orig_denoise = distilled_mod.denoise_audio_video
     _orig_decode = distilled_mod.vae_decode_video
+    _saved_denoise = _orig_denoise
+    _saved_decode = _orig_decode
 
     def _wrapped_denoise(*args: Any, **kwargs: Any) -> Any:
         out = _orig_denoise(*args, **kwargs)

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
 import torch
 
-from services.latent_stats_debug import install_latent_stats_hooks, latent_stat_dict
+import services.latent_stats_debug as latent_stats_debug
+from services.latent_stats_debug import latent_stat_dict
 
 
 def test_latent_stat_dict_finite_cpu() -> None:
@@ -25,6 +27,23 @@ def test_latent_stat_dict_with_nan() -> None:
     assert d["max"] == 3.0
 
 
-def test_install_latent_stats_hooks_idempotent() -> None:
-    install_latent_stats_hooks()
-    install_latent_stats_hooks()
+@pytest.mark.parametrize("via", ("env", "flag"))
+def test_z_latent_stats_hooks_install_idempotent(monkeypatch: pytest.MonkeyPatch, via: str) -> None:
+    """Last in file: patches distilled; must uninstall for other tests."""
+    latent_stats_debug.uninstall_latent_stats_hooks()
+    latent_stats_debug._hooks_installed = False
+    latent_stats_debug._saved_denoise = None
+    latent_stats_debug._saved_decode = None
+    try:
+        if via == "env":
+            monkeypatch.setenv("LTX_DEBUG_LATENT_STATS", "1")
+            monkeypatch.setattr(latent_stats_debug, "LATENT_STATS_DEBUG_ENABLED", False)
+        else:
+            monkeypatch.delenv("LTX_DEBUG_LATENT_STATS", raising=False)
+            monkeypatch.setattr(latent_stats_debug, "LATENT_STATS_DEBUG_ENABLED", True)
+
+        latent_stats_debug.install_latent_stats_hooks()
+        latent_stats_debug.install_latent_stats_hooks()
+        assert latent_stats_debug._hooks_installed
+    finally:
+        latent_stats_debug.uninstall_latent_stats_hooks()
