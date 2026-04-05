@@ -250,6 +250,7 @@ from runtime_config.runtime_policy import decide_force_api_generations
 from state.app_state_types import ModelFileType
 from server_utils.model_layout_migration import migrate_legacy_models_layout
 from services.gpu_info.gpu_info_impl import GpuInfoImpl
+from services.latent_stats_debug import install_latent_stats_hooks
 
 migrate_legacy_models_layout(APP_DATA_DIR)
 IC_LORA_DIR.mkdir(parents=True, exist_ok=True)
@@ -315,6 +316,8 @@ runtime_config = RuntimeConfig(
 
 handler = build_initial_state(runtime_config, DEFAULT_APP_SETTINGS)
 app = create_app(handler=handler, allowed_origins=DEFAULT_ALLOWED_ORIGINS)
+
+install_latent_stats_hooks()
 
 
 def precache_model_files(model_dir: Path) -> int:
