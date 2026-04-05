@@ -10,8 +10,11 @@ Patches ``ltx_pipelines.distilled`` so each distilled generation logs:
   and audio latent tensors.
 * Immediately **before** ``vae_decode_video``: the video latent passed to the VAE.
 
-Logs use the ``latent_stats_debug`` logger at INFO. Stats use a CPU float copy
-(forces a sync on MPS).
+On **MPS**, only **metadata** is logged (shape, dtype, device, numel). We do
+**not** copy tensors to CPU or run ``isfinite`` on device: doing so before the
+next GPU op triggers Metal
+``commit an already committed command buffer`` (PyTorch 2.10). CUDA/CPU tensors
+still get full numeric stats via a CPU float copy.
 """
 
 from __future__ import annotations
@@ -20,10 +23,10 @@ import logging
 import os
 from typing import Any
 
+import torch
+
 # TODO(debug): set False (or use LTX_DEBUG_LATENT_STATS=0) before shipping a release build.
 LATENT_STATS_DEBUG_ENABLED = True
-
-import torch
 
 logger = logging.getLogger("latent_stats_debug")
 
@@ -32,16 +35,32 @@ _denoise_pass: list[int] = [0]
 
 
 def latent_stat_dict(t: torch.Tensor) -> dict[str, Any]:
-    """Scalar summary of ``t`` for logging and tests."""
+    """Scalar summary of ``t`` for logging and tests.
+
+    For **MPS** tensors, skips numeric stats (no ``.cpu()`` / heavy device ops).
+    """
     detached = t.detach()
-    n = detached.numel()
+    n = int(detached.numel())
+    base = {
+        "shape": tuple(detached.shape),
+        "dtype": str(detached.dtype),
+        "device": str(detached.device),
+        "numel": n,
+    }
     if n == 0:
         return {
-            "shape": tuple(detached.shape),
-            "dtype": str(detached.dtype),
-            "device": str(detached.device),
-            "numel": 0,
+            **base,
             "finite_frac": 1.0,
+            "min": None,
+            "max": None,
+            "mean": None,
+            "std": None,
+        }
+
+    if detached.device.type == "mps":
+        return {
+            **base,
+            "finite_frac": None,
             "min": None,
             "max": None,
             "mean": None,
@@ -54,11 +73,8 @@ def latent_stat_dict(t: torch.Tensor) -> dict[str, Any]:
     cpu_fin = cpu[torch.isfinite(cpu)]
     if cpu_fin.numel() == 0:
         return {
-            "shape": tuple(detached.shape),
-            "dtype": str(detached.dtype),
-            "device": str(detached.device),
-            "numel": n,
-            "finite_frac": float(n_fin) / float(n),
+            **base,
+            "finite_frac": float(n_fin) / float(n) if n else 0.0,
             "min": None,
             "max": None,
             "mean": None,
@@ -66,10 +82,7 @@ def latent_stat_dict(t: torch.Tensor) -> dict[str, Any]:
         }
 
     return {
-        "shape": tuple(detached.shape),
-        "dtype": str(detached.dtype),
-        "device": str(detached.device),
-        "numel": n,
+        **base,
         "finite_frac": float(n_fin) / float(n),
         "min": float(cpu_fin.min().item()),
         "max": float(cpu_fin.max().item()),
@@ -80,6 +93,17 @@ def latent_stat_dict(t: torch.Tensor) -> dict[str, Any]:
 
 def _log_latent(label: str, t: torch.Tensor) -> None:
     stats = latent_stat_dict(t)
+    if t.detach().device.type == "mps":
+        logger.info(
+            "[LTX_DEBUG_LATENT_STATS] %s | shape=%s dtype=%s device=%s numel=%s "
+            "(no MPS numeric read — avoids Metal command-buffer assert)",
+            label,
+            stats["shape"],
+            stats["dtype"],
+            stats["device"],
+            stats["numel"],
+        )
+        return
     logger.info(
         "[LTX_DEBUG_LATENT_STATS] %s | shape=%s dtype=%s device=%s numel=%s "
         "finite_frac=%.6f min=%s max=%s mean=%s std=%s",
@@ -88,7 +112,7 @@ def _log_latent(label: str, t: torch.Tensor) -> None:
         stats["dtype"],
         stats["device"],
         stats["numel"],
-        stats["finite_frac"],
+        float(stats["finite_frac"] or 0.0),
         stats["min"],
         stats["max"],
         stats["mean"],
