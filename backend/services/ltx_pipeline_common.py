@@ -45,6 +45,17 @@ def _mps_chunk_to_cpu_for_encode(chunk: torch.Tensor) -> torch.Tensor:
     return chunk.detach().contiguous().to("cpu", non_blocking=False)
 
 
+def _video_for_encode_host_safe(video: torch.Tensor | Iterator[torch.Tensor]) -> torch.Tensor | Iterator[torch.Tensor]:
+    if isinstance(video, torch.Tensor):
+        return _mps_chunk_to_cpu_for_encode(video)
+
+    def _iter_host_safe(src: Iterator[torch.Tensor]) -> Iterator[torch.Tensor]:
+        for c in src:
+            yield _mps_chunk_to_cpu_for_encode(c)
+
+    return _iter_host_safe(iter(video))
+
+
 def encode_video_output(
     video: torch.Tensor | Iterator[torch.Tensor],
     audio: AudioOrNone,
@@ -54,16 +65,9 @@ def encode_video_output(
 ) -> None:
     from ltx_pipelines.utils.media_io import encode_video
 
-    # Fully drain VAE decode (GPU) into CPU tensors *before* PyAV muxing.
-    # Interleaving tiled MPS decode with libav/x264 work has produced Metal
-    # command-buffer crashes — no output file, lost generation.
-    if isinstance(video, torch.Tensor):
-        chunks: list[torch.Tensor] = [_mps_chunk_to_cpu_for_encode(video)]
-    else:
-        chunks = [_mps_chunk_to_cpu_for_encode(c) for c in video]
-
+    video_ready = _video_for_encode_host_safe(video)
     encode_video(
-        video=iter(chunks),
+        video=video_ready,
         fps=fps,
         audio=audio,
         output_path=output_path,
